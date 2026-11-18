@@ -102,14 +102,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Commande introuvable.' }, { status: 404 });
     }
 
-    const { data: prospect, error: prospectError } = await auth.supabase
-      .from('prospects')
-      .select('nom_marque')
-      .eq('id', commande.prospect_id)
-      .maybeSingle();
+    let brandName = 'Client';
+    if (commande.prospect_id) {
+      const { data: prospect, error: prospectError } = await auth.supabase
+        .from('prospects')
+        .select('nom_marque')
+        .eq('id', commande.prospect_id)
+        .maybeSingle();
 
-    if (prospectError) throw prospectError;
-    const brandName = prospect?.nom_marque || 'Client';
+      if (prospectError) throw prospectError;
+      brandName = prospect?.nom_marque || 'Client';
+    }
 
     let folderId = commande.drive_subfolder_id;
     if (!folderId) {
