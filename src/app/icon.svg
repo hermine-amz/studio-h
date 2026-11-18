@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="44" height="44" rx="11" fill="#FFF8B9"/>
+  <rect x="0.75" y="0.75" width="42.5" height="42.5" rx="10.25" stroke="#568203" stroke-opacity="0.35" stroke-width="1.5"/>
+  <path d="M7 13V9.5C7 8.11929 8.11929 7 9.5 7H13" stroke="#568203" stroke-opacity="0.65" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M31 7H34.5C35.8807 7 37 8.11929 37 9.5V13" stroke="#568203" stroke-opacity="0.65" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M37 31V34.5C37 35.8807 35.8807 37 34.5 37H31" stroke="#568203" stroke-opacity="0.65" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M13 37H9.5C8.11929 37 7 35.8807 7 34.5V31" stroke="#568203" stroke-opacity="0.65" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M15.5 12.5V31.5" stroke="#18181B" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M28.5 12.5V31.5" stroke="#18181B" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M15.5 22H19.5" stroke="#18181B" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M24.5 22H28.5" stroke="#18181B" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M22 18.2L25.8 22L22 25.8L18.2 22L22 18.2Z" fill="#568203"/>
+</svg>
+

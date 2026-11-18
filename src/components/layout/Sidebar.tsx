@@ -88,7 +88,7 @@ export function Sidebar() {
       className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-60 flex-col border-r border-stone-200/90"
     >
       {/* Brand Header */}
-      <div className="px-5 py-4.5 border-b border-stone-100">
+      <div className="px-5 pt-6 pb-5 border-b border-stone-100">
         <Link href="/" className="block focus:outline-none">
           <StudioHLogo size="md" />
         </Link>
