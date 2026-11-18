@@ -25,9 +25,33 @@ export type CategoriePrompt =
 
 export type TypeFinance = 'Revenu' | 'Dépense';
 
+export type CategorieDepense =
+  | 'Voix IA'
+  | 'Vidéo IA'
+  | 'Image IA'
+  | 'Avatar / Lip-Sync'
+  | 'Logiciel / Cloud'
+  | 'Autre';
+
 export type TypeFocusTache = 'tache_jour' | 'boite_idee';
 
 export type UrgenceNiveau = 'Critique' | 'Haute' | 'Normale';
+
+export type ModeDecoupagePrompt =
+  | 'Photo → Vidéo (Découpé / Séquence)'
+  | 'Photo → Vidéo (Continu / Non découpé)'
+  | 'Prompt Photo / Image Clé'
+  | 'Prompt Vidéo / Animation'
+  | 'Script Voix / Lip-Sync';
+
+export interface CommandePromptScene {
+  id: string;
+  titre_scene: string;
+  mode_decoupage: ModeDecoupagePrompt;
+  prompt_photo?: string;
+  prompt_video?: string;
+  photo_url?: string;
+}
 
 export interface ProspectReseauxSociaux {
   instagram?: string;
@@ -64,6 +88,7 @@ export interface CommandeUgc {
   brief_produit: string | null;
   liens_reference?: string[];
   photos_reference?: string[];
+  prompts_scenes?: CommandePromptScene[];
   statut_production: StatutProduction;
   montant_eur: number;
   statut_paiement: StatutPaiement;
@@ -98,6 +123,7 @@ export interface Finance {
   id: string;
   type: TypeFinance;
   libelle: string;
+  categorie_depense?: CategorieDepense;
   montant_eur: number;
   date_transaction: string;
   created_at: string;

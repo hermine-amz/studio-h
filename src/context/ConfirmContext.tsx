@@ -50,6 +50,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isDanger = activeModal?.options.variant === 'danger';
+
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
@@ -58,8 +60,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         activeModal &&
         createPortal(
           <div
-            style={{ zIndex: 2147483640 }}
-            className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 backdrop-blur-xs p-4"
+            style={{
+              zIndex: 2147483640,
+              backgroundColor: 'rgba(24, 24, 27, 0.55)',
+            }}
+            className="fixed inset-0 flex items-center justify-center p-4"
             onClick={() => handleClose(false)}
           >
             <div
@@ -70,13 +75,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
-                      activeModal.options.variant === 'danger'
-                        ? 'bg-red-50 border-red-200 text-red-600'
-                        : 'bg-[#FFF8B9]/70 border-[#568203]/30 text-[#568203]'
-                    }`}
+                    style={{
+                      backgroundColor: isDanger ? '#FEF2F2' : '#FFF8B9',
+                      borderColor: isDanger ? '#FECACA' : 'rgba(86,130,3,0.3)',
+                      color: isDanger ? '#DC2626' : '#568203',
+                    }}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
                   >
-                    {activeModal.options.variant === 'danger' ? (
+                    {isDanger ? (
                       <AlertTriangle className="h-5 w-5" strokeWidth={1.5} />
                     ) : (
                       <CheckCircle2 className="h-5 w-5" strokeWidth={1.5} />
@@ -87,7 +93,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                       {activeModal.options.title}
                     </h3>
                     <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-medium">
-                      {activeModal.options.variant === 'danger'
+                      {isDanger
                         ? 'Confirmation de suppression'
                         : 'Confirmation de modification'}
                     </span>
@@ -119,14 +125,15 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => handleClose(true)}
-                  className={
-                    activeModal.options.variant === 'danger'
-                      ? 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-[13px] font-medium shadow-sm transition-all'
-                      : 'btn-primary'
-                  }
+                  style={{
+                    backgroundColor: isDanger ? '#DC2626' : '#568203',
+                    borderColor: isDanger ? '#DC2626' : '#568203',
+                    color: '#FFFFFF',
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[13px] font-medium shadow-sm transition-opacity hover:opacity-90"
                 >
                   {activeModal.options.confirmLabel ||
-                    (activeModal.options.variant === 'danger'
+                    (isDanger
                       ? 'Confirmer la suppression'
                       : 'Confirmer la modification')}
                 </button>

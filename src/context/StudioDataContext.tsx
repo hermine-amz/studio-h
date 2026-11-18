@@ -100,6 +100,7 @@ function serializeCommandeBrief(cmd: Partial<CommandeUgc>): string {
   const meta = {
     liens_reference: cmd.liens_reference || [],
     photos_reference: cmd.photos_reference || [],
+    prompts_scenes: cmd.prompts_scenes || [],
   };
   return `${baseBrief}${META_MARKER}${JSON.stringify(meta)}${META_END}`;
 }
@@ -115,6 +116,7 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
       drive_subfolder_id: validSubfolder,
       liens_reference: raw.liens_reference || [],
       photos_reference: raw.photos_reference || [],
+      prompts_scenes: raw.prompts_scenes || [],
     };
   }
   const cleanBrief = briefRaw.slice(0, idx).trim();
@@ -134,12 +136,16 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
       photos_reference: raw.photos_reference?.length
         ? raw.photos_reference
         : meta.photos_reference || [],
+      prompts_scenes: raw.prompts_scenes?.length
+        ? raw.prompts_scenes
+        : meta.prompts_scenes || [],
     };
   } catch {
     return {
       ...raw,
       drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
+      prompts_scenes: raw.prompts_scenes || [],
     };
   }
 }

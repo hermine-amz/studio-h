@@ -20,11 +20,18 @@ import {
   ChevronUp,
   Trash2,
   Image as ImageIcon,
+  List,
+  Columns,
+  Eye,
+  Megaphone,
+  ShoppingBag,
+  Share2,
+  User,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
-import type { ProspectStatut } from '@/types/database';
+import type { Prospect, ProspectStatut } from '@/types/database';
 import {
   formatEur,
   formatFcfa,
@@ -56,11 +63,12 @@ const EUROPEAN_COUNTRIES = [
   { code: 'NL', label: 'NL — Pays-Bas' },
 ];
 
-export default function CrmKanbanPage() {
+export default function CrmPage() {
   const {
     isLoading,
     prospects,
     addProspect,
+    updateProspect,
     updateProspectStatus,
     deleteProspect,
     createProspectDriveFolder,
@@ -68,15 +76,32 @@ export default function CrmKanbanPage() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
+  // Default to List View as requested ("je veux vue en liste et apercu rapide en modal")
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [statusFilter, setStatusFilter] = useState<ProspectStatut | 'ALL'>(
+    'ALL'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
+
+  // Quick Preview Modal State
+  const [quickPreviewId, setQuickPreviewId] = useState<string | null>(null);
+  const [quickNewAdUrl, setQuickNewAdUrl] = useState('');
+  const [quickNewProdUrl, setQuickNewProdUrl] = useState('');
+
+  const quickProspect = useMemo(
+    () => prospects.find((p) => p.id === quickPreviewId) || null,
+    [prospects, quickPreviewId]
+  );
+
+  // Drag & Drop (for Kanban toggle)
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<ProspectStatut | null>(null);
   const [creatingDriveId, setCreatingDriveId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
 
-  // Quick + Advanced Prospect Form State
+  // New Prospect Form State
   const [nomMarque, setNomMarque] = useState('');
   const [pays, setPays] = useState('FR');
   const [logoUrl, setLogoUrl] = useState<string>('');
@@ -115,6 +140,8 @@ export default function CrmKanbanPage() {
 
   const filteredProspects = useMemo(() => {
     return prospects.filter((p) => {
+      const matchesStatus =
+        statusFilter === 'ALL' || p.statut === statusFilter;
       const matchesSearch =
         !searchQuery.trim() ||
         p.nom_marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -129,9 +156,9 @@ export default function CrmKanbanPage() {
       const matchesCountry =
         countryFilter === 'ALL' || code === countryFilter;
 
-      return matchesSearch && matchesCountry;
+      return matchesStatus && matchesSearch && matchesCountry;
     });
-  }, [prospects, searchQuery, countryFilter]);
+  }, [prospects, statusFilter, searchQuery, countryFilter]);
 
   const totalPipelineEur = useMemo(
     () =>
@@ -140,20 +167,6 @@ export default function CrmKanbanPage() {
         .reduce((acc, p) => acc + Number(p.valeur_estimee_eur || 0), 0),
     [filteredProspects]
   );
-
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    setDraggedId(id);
-    e.dataTransfer.setData('text/plain', id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, col: ProspectStatut) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverCol !== col) {
-      setDragOverCol(col);
-    }
-  };
 
   const requestStatusChange = async (
     id: string,
@@ -183,15 +196,6 @@ export default function CrmKanbanPage() {
     await updateProspectStatus(id, targetCol);
   };
 
-  const handleDrop = async (e: React.DragEvent, targetCol: ProspectStatut) => {
-    e.preventDefault();
-    const id = e.dataTransfer.getData('text/plain') || draggedId;
-    setDraggedId(null);
-    setDragOverCol(null);
-    if (!id) return;
-    await requestStatusChange(id, targetCol);
-  };
-
   const handleDeleteProspect = async (id: string, brandName: string) => {
     const ok = await confirm({
       title: `Supprimer le prospect ${brandName} ?`,
@@ -201,6 +205,7 @@ export default function CrmKanbanPage() {
     });
     if (!ok) return;
 
+    if (quickPreviewId === id) setQuickPreviewId(null);
     await deleteProspect(id);
     toast({
       title: 'Prospect supprimé',
@@ -222,11 +227,33 @@ export default function CrmKanbanPage() {
     }
   };
 
+  const handleQuickAddAd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickProspect || !quickNewAdUrl.trim()) return;
+    const current = quickProspect.liens_pubs || [];
+    await updateProspect(quickProspect.id, {
+      liens_pubs: [...current, quickNewAdUrl.trim()],
+    });
+    setQuickNewAdUrl('');
+    toast({ title: 'Lien Pub Facebook ajouté' });
+  };
+
+  const handleQuickAddProd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickProspect || !quickNewProdUrl.trim()) return;
+    const current = quickProspect.liens_produits || [];
+    await updateProspect(quickProspect.id, {
+      liens_produits: [...current, quickNewProdUrl.trim()],
+    });
+    setQuickNewProdUrl('');
+    toast({ title: 'Lien Produit ajouté' });
+  };
+
   const handleCreateProspect = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomMarque.trim()) return;
 
-    await addProspect({
+    const created = await addProspect({
       nom_marque: nomMarque.trim(),
       pays,
       logo_url: logoUrl.trim() || null,
@@ -251,7 +278,7 @@ export default function CrmKanbanPage() {
 
     toast({
       title: 'Prospect créé avec succès',
-      description: `Cliquez sur le nom "${nomMarque}" pour accéder à son onglet Liens Pubs, Produits & Réseaux.`,
+      description: `${created.nom_marque} a été ajouté à votre liste.`,
     });
 
     setNomMarque('');
@@ -268,17 +295,45 @@ export default function CrmKanbanPage() {
     setValeurEstimee('1500');
     setNotesStrategiques('');
     setIsAddModalOpen(false);
+    setQuickPreviewId(created.id);
+  };
+
+  const getStatusBadgeStyle = (st: ProspectStatut) => {
+    if (st === 'Signé')
+      return 'bg-[#568203] text-white border-[#568203] font-semibold';
+    if (st === 'Négociation' || st === 'Démo envoyée')
+      return 'bg-[#FFF8B9] text-zinc-900 border-[#568203]/30 font-medium';
+    if (st === 'Perdu')
+      return 'bg-red-50 text-red-700 border-red-200';
+    return 'bg-stone-100 text-zinc-700 border-stone-200';
+  };
+
+  const renderBrandAvatar = (p: Prospect, size: 'sm' | 'md' = 'sm') => {
+    const dim = size === 'md' ? 'h-10 w-10 text-sm' : 'h-8 w-8 text-xs';
+    if (p.logo_url) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={p.logo_url}
+          alt={p.nom_marque}
+          className={`${dim} rounded-xl object-cover border border-stone-200 shrink-0`}
+        />
+      );
+    }
+    return (
+      <div
+        className={`${dim} rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 flex items-center justify-center font-bold text-[#568203] shrink-0`}
+      >
+        {p.nom_marque.charAt(0).toUpperCase()}
+      </div>
+    );
   };
 
   if (isLoading) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-24 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {KANBAN_COLUMNS.map((c) => (
-            <Skeleton key={c} className="h-[460px] w-full" />
-          ))}
-        </div>
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
@@ -292,7 +347,7 @@ export default function CrmKanbanPage() {
             Vue 02 — Acquisition & Clients Signés
           </span>
           <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
-            CRM & Pipeline Europe
+            Prospects & Clients Europe
           </h1>
         </div>
 
@@ -306,6 +361,34 @@ export default function CrmKanbanPage() {
             />
           </div>
 
+          {/* Toggle List / Kanban */}
+          <div className="inline-flex rounded-xl bg-white border border-stone-200 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-[#568203] text-white'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <List className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>Vue Liste</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                viewMode === 'kanban'
+                  ? 'bg-[#568203] text-white'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <Columns className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>Kanban</span>
+            </button>
+          </div>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="btn-primary"
@@ -316,90 +399,109 @@ export default function CrmKanbanPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="glass-card p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search
-            className="h-4 w-4 text-zinc-400 absolute left-3.5 top-2.5"
-            strokeWidth={1.5}
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une marque, un contact ou un email..."
-            className="glass-input pl-9"
-          />
+      {/* Filter Bar (Search + Status Tabs + Country) */}
+      <div className="glass-card p-3.5 space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search
+              className="h-4 w-4 text-zinc-400 absolute left-3.5 top-2.5"
+              strokeWidth={1.5}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher une marque, un contact ou un email..."
+              className="glass-input pl-9"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <Globe
+              className="h-4 w-4 text-zinc-500 shrink-0 mr-1"
+              strokeWidth={1.5}
+            />
+            {['ALL', 'FR', 'CH', 'BE', 'UK', 'IT', 'DE', 'LU'].map((code) => (
+              <button
+                key={code}
+                onClick={() => setCountryFilter(code)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-mono uppercase transition-all border shrink-0 ${
+                  countryFilter === code
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                }`}
+              >
+                {code === 'ALL' ? 'Tous Pays' : code}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          <Globe
-            className="h-4 w-4 text-zinc-500 shrink-0 mr-1"
-            strokeWidth={1.5}
-          />
-          {['ALL', 'FR', 'CH', 'BE', 'UK', 'IT', 'DE', 'LU'].map((code) => (
-            <button
-              key={code}
-              onClick={() => setCountryFilter(code)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-mono uppercase transition-all border shrink-0 ${
-                countryFilter === code
-                  ? 'bg-[#568203] text-white border-[#568203]'
-                  : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
-              }`}
-            >
-              {code === 'ALL' ? 'Tous' : code}
-            </button>
-          ))}
+        {/* Status Quick Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-stone-100">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ALL')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
+              statusFilter === 'ALL'
+                ? 'bg-[#568203] text-white border-[#568203]'
+                : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            Tous les statuts ({prospects.length})
+          </button>
+          {KANBAN_COLUMNS.map((st) => {
+            const count = prospects.filter((p) => p.statut === st).length;
+            return (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
+                  statusFilter === st
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                }`}
+              >
+                {st} ({count})
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 items-start">
-        {KANBAN_COLUMNS.map((col) => {
-          const colItems = filteredProspects.filter((p) => p.statut === col);
-          const colTotalEur = colItems.reduce(
-            (sum, item) => sum + Number(item.valeur_estimee_eur || 0),
-            0
-          );
-          const isDropTarget = dragOverCol === col;
-
-          return (
-            <div
-              key={col}
-              onDragOver={(e) => handleDragOver(e, col)}
-              onDragLeave={() => setDragOverCol(null)}
-              onDrop={(e) => handleDrop(e, col)}
-              className={`rounded-2xl p-3.5 border transition-all min-h-[450px] flex flex-col ${
-                isDropTarget
-                  ? 'bg-[#FFF8B9]/40 border-[#568203]'
-                  : col === 'Signé'
-                    ? 'bg-gradient-to-b from-white to-[#FFF8B9]/25 border-[#568203]/30 shadow-sm'
-                    : 'bg-white/85 border-stone-200/85 shadow-sm'
-              }`}
-            >
-              {/* Column Header */}
-              <div className="pb-2.5 mb-3 border-b border-stone-200/75">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-800">
-                    {col}
-                  </span>
-                  <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] font-mono text-zinc-700">
-                    {colItems.length}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-500 font-mono">
-                  {formatEur(colTotalEur)} • {formatFcfa(colTotalEur)}
-                </div>
-              </div>
-
-              {/* Cards Container */}
-              <div className="space-y-3 flex-1">
-                {colItems.length === 0 ? (
-                  <div className="h-28 rounded-xl border border-dashed border-stone-200 flex items-center justify-center p-3 text-center text-xs text-zinc-400">
-                    Glisser une carte ici
-                  </div>
-                ) : (
-                  colItems.map((prospect) => {
+      {/* ================= VUE EN LISTE (DEFAULT) ================= */}
+      {viewMode === 'list' && (
+        <section className="glass-card overflow-hidden">
+          {filteredProspects.length === 0 ? (
+            <div className="p-10 text-center space-y-3">
+              <p className="text-sm text-zinc-500">
+                Aucun prospect ou client trouvé.
+              </p>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                <span>Ajouter votre premier prospect</span>
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-stone-200/90 bg-stone-50/80 text-[11px] uppercase tracking-wider text-zinc-500">
+                    <th className="py-3.5 px-4">Marque & Pays</th>
+                    <th className="py-3.5 px-4">Contact (Email / Tél)</th>
+                    <th className="py-3.5 px-4">Statut</th>
+                    <th className="py-3.5 px-4">Valeur (€ / FCFA)</th>
+                    <th className="py-3.5 px-4">Liens & Drive</th>
+                    <th className="py-3.5 px-4">Suivi</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-200/75 text-[13px]">
+                  {filteredProspects.map((prospect) => {
                     const inactiveDays = daysSince(
                       prospect.date_dernier_contact
                     );
@@ -407,173 +509,180 @@ export default function CrmKanbanPage() {
                       inactiveDays > 3 &&
                       prospect.statut !== 'Signé' &&
                       prospect.statut !== 'Perdu';
-                    const countryCode = normalizeCountryCode(prospect.pays);
                     const adsCount = prospect.liens_pubs?.length || 0;
                     const prodsCount = prospect.liens_produits?.length || 0;
 
                     return (
-                      <div
+                      <tr
                         key={prospect.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, prospect.id)}
-                        className="group rounded-xl bg-white hover:bg-stone-50/60 border border-stone-200/90 hover:border-[#568203]/45 p-3.5 shadow-sm transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                        onClick={() => setQuickPreviewId(prospect.id)}
+                        className="hover:bg-[#FFF8B9]/20 cursor-pointer transition-colors"
                       >
-                        {/* Top row: Logo + Brand + Country Code */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <GripVertical
-                              className="h-4 w-4 text-zinc-400 shrink-0"
-                              strokeWidth={1.5}
-                            />
-                            {prospect.logo_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={prospect.logo_url}
-                                alt={prospect.nom_marque}
-                                className="h-7 w-7 rounded-lg object-cover border border-stone-200 shrink-0"
-                              />
-                            ) : (
-                              <div className="h-7 w-7 rounded-lg bg-[#FFF8B9]/65 border border-[#568203]/25 flex items-center justify-center text-xs font-bold text-[#568203] shrink-0">
-                                {prospect.nom_marque.charAt(0).toUpperCase()}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            {renderBrandAvatar(prospect, 'sm')}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-zinc-900 hover:text-[#568203]">
+                                  {prospect.nom_marque}
+                                </span>
+                                <span className="rounded bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
+                                  {normalizeCountryCode(prospect.pays)}
+                                </span>
+                              </div>
+                              {prospect.lien_boutique && (
+                                <span className="text-xs text-zinc-400 truncate block max-w-[200px]">
+                                  {prospect.lien_boutique}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5 text-xs">
+                            <div className="font-medium text-zinc-800">
+                              {prospect.contact_nom || '—'}
+                            </div>
+                            {prospect.contact_email && (
+                              <div className="text-zinc-500 truncate max-w-[190px]">
+                                {prospect.contact_email}
                               </div>
                             )}
-                            <Link
-                              href={`/crm/${prospect.id}?tab=infos`}
-                              className="text-[13.5px] font-semibold text-zinc-900 hover:text-[#568203] hover:underline leading-snug truncate"
-                              title="Ouvrir la fiche et les liens du prospect"
-                            >
-                              {prospect.nom_marque}
-                            </Link>
-                          </div>
-
-                          <span className="shrink-0 rounded-md bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-zinc-700">
-                            {countryCode}
-                          </span>
-                        </div>
-
-                        {/* Contact Details preview */}
-                        {(prospect.contact_nom ||
-                          prospect.contact_email ||
-                          prospect.contact_telephone) && (
-                          <div className="space-y-1 text-xs text-zinc-500">
-                            {prospect.contact_nom && (
-                              <p className="truncate font-medium text-zinc-700">
-                                {prospect.contact_nom}
-                              </p>
-                            )}
-                            {prospect.contact_email && (
-                              <p className="flex items-center gap-1 truncate text-[11px]">
-                                <Mail
-                                  className="h-3 w-3 shrink-0"
-                                  strokeWidth={1.5}
-                                />
-                                <span className="truncate">
-                                  {prospect.contact_email}
-                                </span>
-                              </p>
-                            )}
                             {prospect.contact_telephone && (
-                              <p className="flex items-center gap-1 truncate text-[11px]">
-                                <Phone
-                                  className="h-3 w-3 shrink-0"
-                                  strokeWidth={1.5}
-                                />
-                                <span className="truncate">
-                                  {prospect.contact_telephone}
-                                </span>
-                              </p>
+                              <div className="text-zinc-500 font-mono text-[11px]">
+                                {prospect.contact_telephone}
+                              </div>
                             )}
                           </div>
-                        )}
+                        </td>
 
-                        {/* Estimated Value in EUR + FCFA */}
-                        <div className="rounded-lg bg-stone-50 border border-stone-200/80 p-2.5">
-                          <div className="text-[10px] uppercase tracking-wider text-zinc-400">
-                            Valeur estimée
-                          </div>
-                          <div className="text-[13.5px] font-semibold text-zinc-900 mt-0.5">
+                        <td
+                          className="py-3.5 px-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <select
+                            aria-label={`Statut de ${prospect.nom_marque}`}
+                            value={prospect.statut}
+                            onChange={(e) =>
+                              requestStatusChange(
+                                prospect.id,
+                                e.target.value as ProspectStatut
+                              )
+                            }
+                            className={`rounded-lg border px-2.5 py-1 text-xs focus:outline-none cursor-pointer ${getStatusBadgeStyle(
+                              prospect.statut
+                            )}`}
+                          >
+                            {KANBAN_COLUMNS.map((st) => (
+                              <option
+                                key={st}
+                                value={st}
+                                className="bg-white text-zinc-900"
+                              >
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-zinc-900">
                             {formatEur(prospect.valeur_estimee_eur)}
                           </div>
                           <div className="text-[11px] font-mono text-zinc-500">
                             {formatFcfa(prospect.valeur_estimee_eur)}
                           </div>
-                        </div>
+                        </td>
 
-                        {/* Badges for Ads & Products count if present */}
-                        {(adsCount > 0 || prodsCount > 0) && (
-                          <div className="flex flex-wrap gap-1.5">
+                        <td
+                          className="py-3.5 px-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
                             {adsCount > 0 && (
-                              <span className="rounded-md bg-[#FFF8B9]/70 border border-[#568203]/20 px-2 py-0.5 text-[10px] font-medium text-zinc-800">
+                              <span className="rounded-md bg-[#FFF8B9]/75 border border-[#568203]/25 px-2 py-0.5 text-[11px] font-medium text-zinc-800">
                                 {adsCount} pub{adsCount > 1 ? 's' : ''} FB
                               </span>
                             )}
                             {prodsCount > 0 && (
-                              <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[10px] font-medium text-zinc-700">
+                              <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-700">
                                 {prodsCount} produit{prodsCount > 1 ? 's' : ''}
                               </span>
                             )}
+                            {prospect.drive_folder_id ? (
+                              <a
+                                href={`https://drive.google.com/drive/folders/${prospect.drive_folder_id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-md bg-stone-100 hover:bg-stone-200 border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-[#568203]"
+                              >
+                                <FolderCheck
+                                  className="h-3 w-3"
+                                  strokeWidth={1.5}
+                                />
+                                <span>Drive</span>
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={creatingDriveId === prospect.id}
+                                onClick={(e) =>
+                                  handleManualDriveInit(e, prospect.id)
+                                }
+                                className="inline-flex items-center gap-1 rounded-md bg-white hover:bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-500"
+                              >
+                                <FolderPlus
+                                  className="h-3 w-3"
+                                  strokeWidth={1.5}
+                                />
+                                <span>
+                                  {creatingDriveId === prospect.id
+                                    ? '...'
+                                    : '+ Drive'}
+                                </span>
+                              </button>
+                            )}
                           </div>
-                        )}
+                        </td>
 
-                        {/* Alert Indicator (> 3 days without contact) */}
-                        {isStale && (
-                          <div className="flex items-center gap-1.5 rounded-lg bg-[#FFF8B9]/65 border border-[#568203]/30 px-2.5 py-1.5 text-[11px] text-zinc-800">
-                            <AlertCircle
-                              className="h-3.5 w-3.5 shrink-0 text-[#568203]"
-                              strokeWidth={1.5}
-                            />
-                            <span>Sans suivi depuis {inactiveDays} j</span>
-                          </div>
-                        )}
-
-                        {/* Drive Folder Status / Quick Action */}
-                        <div className="pt-2 border-t border-stone-200/70 flex items-center justify-between gap-1.5">
-                          {prospect.drive_folder_id ? (
-                            <a
-                              href={`https://drive.google.com/drive/folders/${prospect.drive_folder_id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] text-[#568203] font-medium hover:underline"
-                            >
-                              <FolderCheck
-                                className="h-3.5 w-3.5"
+                        <td className="py-3.5 px-4">
+                          {isStale ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/75 border border-[#568203]/30 px-2 py-0.5 text-[11px] font-medium text-zinc-900">
+                              <AlertCircle
+                                className="h-3 w-3 text-[#568203]"
                                 strokeWidth={1.5}
                               />
-                              <span>Drive</span>
-                              <ExternalLink
-                                className="h-3 w-3"
-                                strokeWidth={1.5}
-                              />
-                            </a>
+                              {inactiveDays} j
+                            </span>
                           ) : (
+                            <span className="text-xs text-zinc-500">
+                              Il y a {inactiveDays} j
+                            </span>
+                          )}
+                        </td>
+
+                        <td
+                          className="py-3.5 px-4 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="inline-flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              disabled={creatingDriveId === prospect.id}
-                              onClick={(e) =>
-                                handleManualDriveInit(e, prospect.id)
-                              }
-                              className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 transition-colors"
+                              onClick={() => setQuickPreviewId(prospect.id)}
+                              className="btn-secondary py-1.5 px-2.5 text-xs"
+                              title="Aperçu rapide en modal"
                             >
-                              <FolderPlus
-                                className="h-3.5 w-3.5"
-                                strokeWidth={1.5}
-                              />
-                              <span>
-                                {creatingDriveId === prospect.id
-                                  ? 'Création...'
-                                  : 'Créer Drive'}
-                              </span>
+                              <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              <span>Aperçu</span>
                             </button>
-                          )}
-
-                          <div className="flex items-center gap-1">
                             <Link
-                              href={`/crm/${prospect.id}?tab=infos`}
-                              className="inline-flex items-center gap-1 rounded-lg bg-stone-100 hover:bg-[#568203] hover:text-white border border-stone-200 px-2 py-1 text-[11px] font-medium text-zinc-800 transition-colors"
+                              href={`/crm/${prospect.id}`}
+                              className="btn-primary py-1.5 px-2.5 text-xs"
                             >
-                              <span>Fiche & Liens</span>
+                              <span>Fiche 360°</span>
                               <ArrowUpRight
-                                className="h-3 w-3"
+                                className="h-3.5 w-3.5"
                                 strokeWidth={1.5}
                               />
                             </Link>
@@ -585,47 +694,456 @@ export default function CrmKanbanPage() {
                                   prospect.nom_marque
                                 )
                               }
-                              className="rounded-lg p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              aria-label="Supprimer le prospect"
+                              className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              aria-label="Supprimer"
                             >
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                             </button>
                           </div>
-                        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
-                        {/* Quick Status Select (with Confirmation Modal) */}
-                        <div>
-                          <select
-                            aria-label={`Changer le statut de ${prospect.nom_marque}`}
-                            value={prospect.statut}
-                            onChange={(e) =>
-                              requestStatusChange(
-                                prospect.id,
-                                e.target.value as ProspectStatut
-                              )
-                            }
-                            className="w-full rounded-lg bg-stone-50 border border-stone-200 px-2 py-1.5 text-xs text-zinc-700 focus:outline-none focus:border-[#568203]"
-                          >
-                            {KANBAN_COLUMNS.map((st) => (
-                              <option key={st} value={st}>
-                                Statut : {st}
-                              </option>
-                            ))}
-                          </select>
+      {/* ================= VUE KANBAN (OPTIONAL TOGGLE) ================= */}
+      {viewMode === 'kanban' && (
+        <div className="flex gap-4 overflow-x-auto pb-4 items-start">
+          {KANBAN_COLUMNS.map((col) => {
+            const colItems = filteredProspects.filter((p) => p.statut === col);
+            const colTotalEur = colItems.reduce(
+              (sum, item) => sum + Number(item.valeur_estimee_eur || 0),
+              0
+            );
+            const isDropTarget = dragOverCol === col;
+
+            return (
+              <div
+                key={col}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverCol !== col) setDragOverCol(col);
+                }}
+                onDragLeave={() => setDragOverCol(null)}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  const id =
+                    e.dataTransfer.getData('text/plain') || draggedId;
+                  setDraggedId(null);
+                  setDragOverCol(null);
+                  if (id) await requestStatusChange(id, col);
+                }}
+                className={`w-72 shrink-0 rounded-2xl p-3.5 border transition-all min-h-[420px] flex flex-col ${
+                  isDropTarget
+                    ? 'bg-[#FFF8B9]/40 border-[#568203]'
+                    : col === 'Signé'
+                      ? 'bg-gradient-to-b from-white to-[#FFF8B9]/25 border-[#568203]/30 shadow-sm'
+                      : 'bg-white border-stone-200/85 shadow-sm'
+                }`}
+              >
+                <div className="pb-2.5 mb-3 border-b border-stone-200/75">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-800">
+                      {col}
+                    </span>
+                    <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] font-mono text-zinc-700">
+                      {colItems.length}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-500 font-mono">
+                    {formatEur(colTotalEur)} • {formatFcfa(colTotalEur)}
+                  </div>
+                </div>
+
+                <div className="space-y-3 flex-1">
+                  {colItems.map((prospect) => (
+                    <div
+                      key={prospect.id}
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggedId(prospect.id);
+                        e.dataTransfer.setData('text/plain', prospect.id);
+                      }}
+                      onClick={() => setQuickPreviewId(prospect.id)}
+                      className="rounded-xl bg-white hover:bg-stone-50 border border-stone-200 hover:border-[#568203]/45 p-3.5 shadow-sm cursor-pointer space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <GripVertical
+                            className="h-4 w-4 text-zinc-400 shrink-0"
+                            strokeWidth={1.5}
+                          />
+                          {renderBrandAvatar(prospect, 'sm')}
+                          <span className="text-[13.5px] font-semibold text-zinc-900 truncate">
+                            {prospect.nom_marque}
+                          </span>
+                        </div>
+                        <span className="rounded bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
+                          {normalizeCountryCode(prospect.pays)}
+                        </span>
+                      </div>
+
+                      <div className="rounded-lg bg-stone-50 border border-stone-200/80 p-2.5">
+                        <div className="text-[13.5px] font-semibold text-zinc-900">
+                          {formatEur(prospect.valeur_estimee_eur)}
+                        </div>
+                        <div className="text-[11px] font-mono text-zinc-500">
+                          {formatFcfa(prospect.valeur_estimee_eur)}
                         </div>
                       </div>
-                    );
-                  })
-                )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ================= MODAL : APERÇU RAPIDE DU PROSPECT / CLIENT ================= */}
+      {quickProspect && (
+        <div
+          style={{ zIndex: 2147483600 }}
+          onClick={() => setQuickPreviewId(null)}
+          className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-card w-full max-w-2xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-stone-200">
+              <div className="flex items-center gap-3">
+                {renderBrandAvatar(quickProspect, 'md')}
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold text-zinc-900">
+                      {quickProspect.nom_marque}
+                    </h2>
+                    <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-xs font-mono uppercase text-zinc-700">
+                      {normalizeCountryCode(quickProspect.pays)}
+                    </span>
+                    <span
+                      className={`rounded-md border px-2.5 py-0.5 text-xs ${getStatusBadgeStyle(
+                        quickProspect.statut
+                      )}`}
+                    >
+                      {quickProspect.statut}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Aperçu Rapide — Coordonnées, Pubs Facebook, Produits & Réseaux
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuickPreviewId(null)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-800 hover:bg-stone-100"
+              >
+                <X className="h-5 w-5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {/* Coordinates & Value Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Coordonnées Directes
+                </div>
+                <div className="space-y-1.5 text-xs text-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <User
+                      className="h-3.5 w-3.5 text-zinc-400"
+                      strokeWidth={1.5}
+                    />
+                    <span className="font-medium">
+                      {quickProspect.contact_nom || 'Contact non renseigné'}
+                    </span>
+                  </div>
+                  {quickProspect.contact_email && (
+                    <a
+                      href={`mailto:${quickProspect.contact_email}`}
+                      className="flex items-center gap-2 text-[#568203] hover:underline"
+                    >
+                      <Mail className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span>{quickProspect.contact_email}</span>
+                    </a>
+                  )}
+                  {quickProspect.contact_telephone && (
+                    <a
+                      href={`tel:${quickProspect.contact_telephone}`}
+                      className="flex items-center gap-2 text-[#568203] hover:underline font-mono"
+                    >
+                      <Phone className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span>{quickProspect.contact_telephone}</span>
+                    </a>
+                  )}
+                  {quickProspect.lien_boutique && (
+                    <a
+                      href={quickProspect.lien_boutique}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 text-[#568203] font-medium hover:underline"
+                    >
+                      <Globe className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span className="truncate">
+                        {quickProspect.lien_boutique}
+                      </span>
+                      <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 flex flex-col justify-between space-y-2">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Valeur Estimée & Statut
+                  </div>
+                  <CurrencyDisplay
+                    amountEur={quickProspect.valeur_estimee_eur}
+                    size="lg"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-500 mb-1">
+                    Changer le statut :
+                  </label>
+                  <select
+                    value={quickProspect.statut}
+                    onChange={(e) =>
+                      requestStatusChange(
+                        quickProspect.id,
+                        e.target.value as ProspectStatut
+                      )
+                    }
+                    className="glass-input py-1.5 text-xs"
+                  >
+                    {KANBAN_COLUMNS.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Modal: Quick Add Prospect + Optional Logo & Links */}
+            {/* Social Media Pills */}
+            {quickProspect.liens_reseaux &&
+              Object.values(quickProspect.liens_reseaux).some(Boolean) && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                    <Share2
+                      className="h-3.5 w-3.5 text-[#568203]"
+                      strokeWidth={1.5}
+                    />
+                    <span>Réseaux Sociaux</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {quickProspect.liens_reseaux.instagram && (
+                      <a
+                        href={quickProspect.liens_reseaux.instagram}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary py-1.5 px-3 text-xs"
+                      >
+                        <span>Instagram</span>
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                      </a>
+                    )}
+                    {quickProspect.liens_reseaux.tiktok && (
+                      <a
+                        href={quickProspect.liens_reseaux.tiktok}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary py-1.5 px-3 text-xs"
+                      >
+                        <span>TikTok</span>
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                      </a>
+                    )}
+                    {quickProspect.liens_reseaux.facebook && (
+                      <a
+                        href={quickProspect.liens_reseaux.facebook}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary py-1.5 px-3 text-xs"
+                      >
+                        <span>Facebook</span>
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                      </a>
+                    )}
+                    {quickProspect.liens_reseaux.linkedin && (
+                      <a
+                        href={quickProspect.liens_reseaux.linkedin}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary py-1.5 px-3 text-xs"
+                      >
+                        <span>LinkedIn</span>
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            {/* Quick Facebook Ads Links & Product Links */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Facebook Ads */}
+              <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
+                    <Megaphone
+                      className="h-3.5 w-3.5 text-[#568203]"
+                      strokeWidth={1.5}
+                    />
+                    Pubs Facebook ({quickProspect.liens_pubs?.length || 0})
+                  </span>
+                </div>
+
+                <form onSubmit={handleQuickAddAd} className="flex gap-1.5">
+                  <input
+                    type="url"
+                    value={quickNewAdUrl}
+                    onChange={(e) => setQuickNewAdUrl(e.target.value)}
+                    placeholder="Ajouter un lien pub..."
+                    className="glass-input py-1.5 text-xs flex-1"
+                  />
+                  <button type="submit" className="btn-primary py-1.5 px-2.5">
+                    <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                </form>
+
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {(quickProspect.liens_pubs || []).map((url, idx) => (
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between gap-2 rounded-lg bg-white border border-stone-200 px-2.5 py-1.5 text-xs text-[#568203] hover:underline"
+                    >
+                      <span className="truncate">{url}</span>
+                      <ExternalLink
+                        className="h-3 w-3 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* Products */}
+              <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
+                    <ShoppingBag
+                      className="h-3.5 w-3.5 text-[#568203]"
+                      strokeWidth={1.5}
+                    />
+                    Produits ciblés ({quickProspect.liens_produits?.length || 0})
+                  </span>
+                </div>
+
+                <form onSubmit={handleQuickAddProd} className="flex gap-1.5">
+                  <input
+                    type="url"
+                    value={quickNewProdUrl}
+                    onChange={(e) => setQuickNewProdUrl(e.target.value)}
+                    placeholder="Ajouter un lien produit..."
+                    className="glass-input py-1.5 text-xs flex-1"
+                  />
+                  <button type="submit" className="btn-primary py-1.5 px-2.5">
+                    <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                </form>
+
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {(quickProspect.liens_produits || []).map((url, idx) => (
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between gap-2 rounded-lg bg-white border border-stone-200 px-2.5 py-1.5 text-xs text-zinc-800 hover:text-[#568203] hover:underline"
+                    >
+                      <span className="truncate">{url}</span>
+                      <ExternalLink
+                        className="h-3 w-3 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Strategic Notes */}
+            {quickProspect.notes_strategiques && (
+              <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Notes Stratégiques
+                </div>
+                <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                  {quickProspect.notes_strategiques}
+                </p>
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={() =>
+                  handleDeleteProspect(
+                    quickProspect.id,
+                    quickProspect.nom_marque
+                  )
+                }
+                className="btn-secondary text-red-600 border-red-200 hover:bg-red-50 text-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <span>Supprimer</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuickPreviewId(null)}
+                  className="btn-secondary"
+                >
+                  Fermer
+                </button>
+                <Link
+                  href={`/crm/${quickProspect.id}`}
+                  className="btn-primary"
+                >
+                  <span>Ouvrir la Fiche 360° complète</span>
+                  <ArrowUpRight className="h-4 w-4" strokeWidth={1.5} />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL : CRÉATION RAPIDE D'UN PROSPECT ================= */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+        <div
+          style={{ zIndex: 2147483600 }}
+          className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
+        >
           <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-stone-200/80">
               <div className="flex items-center gap-2.5">
@@ -651,7 +1169,6 @@ export default function CrmKanbanPage() {
             </div>
 
             <form onSubmit={handleCreateProspect} className="space-y-4">
-              {/* Optional Logo Upload + Brand Name + Country */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 pb-2">
                 <div className="flex items-center gap-3 shrink-0">
                   <input
@@ -683,7 +1200,10 @@ export default function CrmKanbanPage() {
                       onClick={() => logoInputRef.current?.click()}
                       className="h-14 w-14 rounded-xl border border-dashed border-stone-300 bg-stone-50 hover:border-[#568203] flex flex-col items-center justify-center text-[10px] text-zinc-500 gap-0.5"
                     >
-                      <ImageIcon className="h-4 w-4 text-zinc-400" strokeWidth={1.5} />
+                      <ImageIcon
+                        className="h-4 w-4 text-zinc-400"
+                        strokeWidth={1.5}
+                      />
                       <span>Logo</span>
                     </button>
                   )}
@@ -815,7 +1335,6 @@ export default function CrmKanbanPage() {
                 />
               </div>
 
-              {/* Optional expandable section for Ads, Products & Socials right away */}
               <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5">
                 <button
                   type="button"

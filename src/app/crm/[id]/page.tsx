@@ -71,12 +71,25 @@ function Client360Content() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
-  const [activeTab, setActiveTab] = useState<'infos' | '360'>(initialTab);
-
   const client = useMemo(
     () => prospects.find((p) => p.id === clientId),
     [prospects, clientId]
   );
+
+  const [activeTab, setActiveTab] = useState<'infos' | '360'>(() => {
+    const paramTab = searchParams.get('tab');
+    if (paramTab === '360' || paramTab === 'infos') return paramTab;
+    return 'infos';
+  });
+
+  useEffect(() => {
+    const paramTab = searchParams.get('tab');
+    if (paramTab === '360' || paramTab === 'infos') {
+      setActiveTab(paramTab);
+    } else if (client) {
+      setActiveTab(client.statut === 'Signé' ? '360' : 'infos');
+    }
+  }, [client?.id, client?.statut, searchParams]);
 
   const clientOrders = useMemo(
     () => commandes.filter((c) => c.prospect_id === clientId),
@@ -498,6 +511,114 @@ function Client360Content() {
             <span>Supprimer</span>
           </button>
         </div>
+      </div>
+
+      {/* Quick Action Bar under Client Header */}
+      <div className="glass-card p-3 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {client.lien_boutique ? (
+            <a
+              href={client.lien_boutique}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <Globe className="h-3.5 w-3.5 text-[#568203]" strokeWidth={1.5} />
+              <span>Ouvrir Boutique</span>
+              <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab('infos')}
+              className="btn-secondary py-1.5 px-3 text-xs opacity-75"
+            >
+              <Globe className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>+ Ajouter Boutique</span>
+            </button>
+          )}
+
+          {adLinks.length > 0 ? (
+            <a
+              href={adLinks[0]}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <Megaphone
+                className="h-3.5 w-3.5 text-[#568203]"
+                strokeWidth={1.5}
+              />
+              <span>Voir Pubs Facebook ({adLinks.length})</span>
+              <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab('infos')}
+              className="btn-secondary py-1.5 px-3 text-xs opacity-75"
+            >
+              <Megaphone className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>+ Ajouter Pubs Facebook</span>
+            </button>
+          )}
+
+          {client.drive_folder_id ? (
+            <a
+              href={`https://drive.google.com/drive/folders/${client.drive_folder_id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <Folder
+                className="h-3.5 w-3.5 text-[#568203]"
+                strokeWidth={1.5}
+              />
+              <span>Ouvrir Dossier Drive</span>
+              <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => createProspectDriveFolder(client.id)}
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <FolderPlus
+                className="h-3.5 w-3.5 text-[#568203]"
+                strokeWidth={1.5}
+              />
+              <span>Initialiser Dossier Drive</span>
+            </button>
+          )}
+
+          {client.contact_telephone && (
+            <a
+              href={`https://wa.me/${client.contact_telephone.replace(/[^0-9]/g, '')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <Phone className="h-3.5 w-3.5 text-[#568203]" strokeWidth={1.5} />
+              <span>WhatsApp / Téléphone</span>
+            </a>
+          )}
+
+          {client.contact_email && (
+            <a
+              href={`mailto:${client.contact_email}`}
+              className="btn-secondary py-1.5 px-3 text-xs"
+            >
+              <Mail className="h-3.5 w-3.5 text-[#568203]" strokeWidth={1.5} />
+              <span>Envoyer un Email</span>
+            </a>
+          )}
+        </div>
+
+        <span className="text-[11px] font-medium text-zinc-500">
+          {client.statut === 'Signé'
+            ? 'Mode Client Signé (Production prioritaire)'
+            : 'Mode Prospection (Audit & Liens prioritaires)'}
+        </span>
       </div>
 
       {/* Navigation Tabs */}

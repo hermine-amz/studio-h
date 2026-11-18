@@ -11,11 +11,13 @@ import {
   ArrowDownRight,
   CheckCircle2,
   Calendar,
+  PieChart,
+  Tag,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
-import type { TypeFinance } from '@/types/database';
+import type { TypeFinance, CategorieDepense } from '@/types/database';
 import { formatEur, formatFcfa } from '@/lib/currency';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -41,6 +43,34 @@ const PERIOD_OPTIONS: { id: PeriodFilter; label: string }[] = [
   { id: 'custom', label: 'Calendrier personnalisé' },
 ];
 
+const EXPENSE_CATEGORIES: CategorieDepense[] = [
+  'Voix IA',
+  'Vidéo IA',
+  'Image IA',
+  'Avatar / Lip-Sync',
+  'Logiciel / Cloud',
+  'Autre',
+];
+
+function parseExpenseLabel(rawLibelle: string): {
+  category: CategorieDepense;
+  cleanLabel: string;
+} {
+  const match = rawLibelle.match(
+    /^\[(Voix IA|Vidéo IA|Image IA|Avatar \/ Lip-Sync|Logiciel \/ Cloud|Autre)\]\s*(.*)$/i
+  );
+  if (match) {
+    return {
+      category: match[1] as CategorieDepense,
+      cleanLabel: match[2],
+    };
+  }
+  return {
+    category: 'Logiciel / Cloud',
+    cleanLabel: rawLibelle,
+  };
+}
+
 export default function FinancesPage() {
   const {
     isLoading,
@@ -62,9 +92,14 @@ export default function FinancesPage() {
   const [customEnd, setCustomEnd] = useState<string>(
     () => new Date().toISOString().split('T')[0]
   );
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<
+    CategorieDepense | 'ALL'
+  >('ALL');
 
   // Quick Form State
   const [type, setType] = useState<TypeFinance>('Dépense');
+  const [categorieDepense, setCategorieDepense] =
+    useState<CategorieDepense>('Vidéo IA');
   const [libelle, setLibelle] = useState('');
   const [montantEur, setMontantEur] = useState('');
   const [dateTransaction, setDateTransaction] = useState(
@@ -75,22 +110,16 @@ export default function FinancesPage() {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
 
-    // Start of week (Monday)
     const dayOfWeek = now.getDay() || 7;
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - dayOfWeek + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
-    // Start of month
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    // 30 days ago & 90 days ago
     const days30Ago = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     days30Ago.setHours(0, 0, 0, 0);
     const days90Ago = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     days90Ago.setHours(0, 0, 0, 0);
-
-    // Start of year
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
     return (dateStr: string): boolean => {
@@ -157,14 +186,32 @@ export default function FinancesPage() {
     isDateInSelectedPeriod,
   ]);
 
-  const depenses = useMemo(
+  const depensesAllPeriod = useMemo(
     () =>
       finances
         .filter(
           (f) => f.type === 'Dépense' && isDateInSelectedPeriod(f.date_transaction)
         )
+        .map((f) => {
+          const parsed = parseExpenseLabel(f.libelle);
+          return {
+            ...f,
+            parsedCategory: parsed.category,
+            cleanLabel: parsed.cleanLabel,
+          };
+        })
         .sort((a, b) => b.date_transaction.localeCompare(a.date_transaction)),
     [finances, isDateInSelectedPeriod]
+  );
+
+  const depenses = useMemo(
+    () =>
+      depensesAllPeriod.filter(
+        (d) =>
+          expenseCategoryFilter === 'ALL' ||
+          d.parsedCategory === expenseCategoryFilter
+      ),
+    [depensesAllPeriod, expenseCategoryFilter]
   );
 
   const totalRevenusEur = useMemo(
@@ -178,20 +225,34 @@ export default function FinancesPage() {
 
   const totalDepensesEur = useMemo(
     () =>
-      depenses.reduce((sum, item) => sum + Number(item.montant_eur || 0), 0),
-    [depenses]
+      depensesAllPeriod.reduce(
+        (sum, item) => sum + Number(item.montant_eur || 0),
+        0
+      ),
+    [depensesAllPeriod]
   );
 
   const beneficeNetEur = totalRevenusEur - totalDepensesEur;
+
+  const expenseRatioPct =
+    totalRevenusEur > 0
+      ? Math.min(100, Math.round((totalDepensesEur / totalRevenusEur) * 100))
+      : 0;
+  const netMarginPct = totalRevenusEur > 0 ? Math.max(0, 100 - expenseRatioPct) : 0;
 
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(montantEur);
     if (!libelle.trim() || !amount || amount <= 0) return;
 
+    const finalLabel =
+      type === 'Dépense'
+        ? `[${categorieDepense}] ${libelle.trim()}`
+        : libelle.trim();
+
     await addFinance({
       type,
-      libelle: libelle.trim(),
+      libelle: finalLabel,
       montant_eur: amount,
       date_transaction:
         dateTransaction || new Date().toISOString().split('T')[0],
@@ -253,7 +314,7 @@ export default function FinancesPage() {
         </div>
       </div>
 
-      {/* Period Filter Bar (Jour, Semaine, Mois, 30j, 90j, Cette année, Depuis le début, Calendrier personnalisé) */}
+      {/* Period Filter Bar */}
       <div className="glass-card p-3.5 space-y-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
           <Calendar
@@ -298,7 +359,7 @@ export default function FinancesPage() {
             </div>
             <span className="text-xs text-zinc-500">
               Période personnalisée active ({combinedRevenus.length} revenus,{' '}
-              {depenses.length} dépenses)
+              {depensesAllPeriod.length} dépenses)
             </span>
           </div>
         )}
@@ -309,7 +370,8 @@ export default function FinancesPage() {
         <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-              Revenus Encaissés ({PERIOD_OPTIONS.find((p) => p.id === period)?.label})
+              Revenus Encaissés (
+              {PERIOD_OPTIONS.find((p) => p.id === period)?.label})
             </span>
             <div className="rounded-xl bg-[#FFF8B9]/70 border border-[#568203]/25 p-2">
               <TrendingUp
@@ -327,7 +389,8 @@ export default function FinancesPage() {
         <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-              Dépenses Totales ({PERIOD_OPTIONS.find((p) => p.id === period)?.label})
+              Dépenses Totales (
+              {PERIOD_OPTIONS.find((p) => p.id === period)?.label})
             </span>
             <div className="rounded-xl bg-stone-100 border border-stone-200 p-2">
               <TrendingDown
@@ -358,7 +421,44 @@ export default function FinancesPage() {
         </div>
       </div>
 
-      {/* 2. Quick Add Transaction Form */}
+      {/* Visual Breakdown Bar: Revenues vs AI Expenses */}
+      <section className="glass-card p-4 space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 font-medium text-zinc-800">
+            <PieChart
+              className="h-4 w-4 text-[#568203]"
+              strokeWidth={1.5}
+            />
+            <span>
+              Répartition Rentabilité vs Coûts Outils IA sur la période
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4 font-mono">
+            <span className="text-[#568203] font-semibold">
+              Marge Nette : {netMarginPct}%
+            </span>
+            <span className="text-zinc-500">
+              Poids Outils IA : {expenseRatioPct}% du CA
+            </span>
+          </div>
+        </div>
+
+        <div className="h-3 w-full rounded-full bg-stone-200 overflow-hidden flex">
+          <div
+            style={{ width: `${netMarginPct}%` }}
+            className="h-full bg-[#568203] transition-all duration-500"
+            title={`Marge Nette : ${netMarginPct}%`}
+          />
+          <div
+            style={{ width: `${expenseRatioPct}%` }}
+            className="h-full bg-[#FFF8B9] border-l border-stone-300 transition-all duration-500"
+            title={`Dépenses IA : ${expenseRatioPct}%`}
+          />
+        </div>
+      </section>
+
+      {/* 2. Quick Add Transaction Form (with Expense Category) */}
       <section className="glass-card p-5">
         <h2 className="text-[15px] font-semibold text-zinc-900 mb-3.5">
           Ajouter rapidement un Revenu ou une Dépense
@@ -381,7 +481,32 @@ export default function FinancesPage() {
             </select>
           </div>
 
-          <div className="lg:col-span-4">
+          {type === 'Dépense' && (
+            <div className="lg:col-span-2">
+              <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                Catégorie IA
+              </label>
+              <select
+                value={categorieDepense}
+                onChange={(e) =>
+                  setCategorieDepense(e.target.value as CategorieDepense)
+                }
+                className="glass-input"
+              >
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div
+            className={
+              type === 'Dépense' ? 'lg:col-span-3' : 'lg:col-span-5'
+            }
+          >
             <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Libellé de l’opération *
             </label>
@@ -392,7 +517,7 @@ export default function FinancesPage() {
               onChange={(e) => setLibelle(e.target.value)}
               placeholder={
                 type === 'Dépense'
-                  ? 'Ex: Abonnement Runway Gen-3 Unlimited'
+                  ? 'Ex: Abonnement Runway Gen-3 / Kling'
                   : 'Ex: Acompte Client Pack UGC'
               }
               className="glass-input"
@@ -427,17 +552,21 @@ export default function FinancesPage() {
             />
           </div>
 
-          <div className="lg:col-span-2">
-            <button type="submit" className="btn-primary w-full">
+          <div className="lg:col-span-1">
+            <button
+              type="submit"
+              className="btn-primary w-full"
+              title="Enregistrer"
+            >
               <Plus className="h-4 w-4" strokeWidth={1.5} />
-              <span>Enregistrer</span>
+              <span className="lg:hidden">Enregistrer</span>
             </button>
           </div>
         </form>
       </section>
 
-      {/* 3. Double Table: Revenues & Recurring AI Expenses */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* 3. Double Table: Revenues & Categorized Recurring AI Expenses */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <section className="glass-card p-5 space-y-3.5">
           <div className="flex items-center justify-between pb-3.5 border-b border-stone-200/85">
             <div className="flex items-center gap-2.5">
@@ -530,7 +659,7 @@ export default function FinancesPage() {
                   Dépenses & Abonnements Outils IA
                 </h2>
                 <p className="text-xs text-zinc-500">
-                  Suivi des coûts fixes et crédits de génération
+                  Classées par catégorie (Voix IA, Vidéo IA, Image IA, Cloud...)
                 </p>
               </div>
             </div>
@@ -539,10 +668,39 @@ export default function FinancesPage() {
             </span>
           </div>
 
+          {/* Expense Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setExpenseCategoryFilter('ALL')}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium border shrink-0 transition-colors ${
+                expenseCategoryFilter === 'ALL'
+                  ? 'bg-[#568203] text-white border-[#568203]'
+                  : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              Toutes
+            </button>
+            {EXPENSE_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setExpenseCategoryFilter(cat)}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-medium border shrink-0 transition-colors ${
+                  expenseCategoryFilter === cat
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-2">
             {depenses.length === 0 ? (
               <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
-                Aucune dépense enregistrée sur cette période.
+                Aucune dépense dans cette catégorie sur la période.
               </div>
             ) : (
               depenses.map((dep) => (
@@ -550,11 +708,17 @@ export default function FinancesPage() {
                   key={dep.id}
                   className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 px-3.5 py-3"
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium text-zinc-900 truncate">
-                      {dep.libelle}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/80 border border-[#568203]/25 px-2 py-0.5 text-[10px] font-medium text-zinc-900">
+                        <Tag className="h-2.5 w-2.5 text-[#568203]" strokeWidth={1.5} />
+                        {dep.parsedCategory}
+                      </span>
+                      <span className="text-[13px] font-medium text-zinc-900 truncate">
+                        {dep.cleanLabel}
+                      </span>
                     </div>
-                    <div className="text-xs font-mono text-zinc-500 mt-0.5">
+                    <div className="text-xs font-mono text-zinc-500">
                       {dep.date_transaction}
                     </div>
                   </div>
@@ -571,7 +735,11 @@ export default function FinancesPage() {
 
                     <button
                       onClick={() =>
-                        handleDeleteTransaction(dep.id, dep.libelle, 'Dépense')
+                        handleDeleteTransaction(
+                          dep.id,
+                          dep.cleanLabel,
+                          'Dépense'
+                        )
                       }
                       className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
                       aria-label="Supprimer la dépense"
