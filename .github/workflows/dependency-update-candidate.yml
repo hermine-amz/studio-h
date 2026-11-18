@@ -1,0 +1,81 @@
+name: Safe dependency update candidate
+
+on:
+  push:
+    branches:
+      - security/dependency-update-check
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-validate:
+    name: Update dependencies and validate candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+      STUDIO_H_ADMIN_EMAIL: ci-admin@example.com
+    steps:
+      - name: Checkout isolated security branch
+        uses: actions/checkout@v4
+        with:
+          ref: security/dependency-update-check
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Upgrade vulnerable direct dependencies
+        run: |
+          npm install next@16.4.6 react@19 react-dom@19 googleapis@190.0.0
+          npm install --save-dev @types/react@^19 @types/react-dom@^19 postcss@^8.5.23
+
+      - name: Audit candidate dependencies
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node <<'NODE'
+          const audit = require('/tmp/npm-audit.json');
+          const totals = audit.metadata?.vulnerabilities ?? {};
+          console.log('Candidate vulnerability totals:', JSON.stringify(totals));
+          for (const [name, item] of Object.entries(audit.vulnerabilities ?? {})) {
+            console.log(JSON.stringify({ name, severity: item.severity, direct: item.isDirect, fixAvailable: item.fixAvailable }));
+          }
+          if ((totals.critical ?? 0) > 0 || (totals.high ?? 0) > 0) {
+            console.error('Candidate still contains critical or high vulnerabilities; changes will not be committed.');
+            process.exit(1);
+          }
+          NODE
+
+      - name: TypeScript validation
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit validated dependency files
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "security: update vulnerable dependencies"
+            git push origin HEAD:security/dependency-update-check
+          else
+            echo "No dependency file changes to commit."
+          fi
+
+      - name: Preserve candidate files for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-update-candidate
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: warn
+          retention-days: 7
