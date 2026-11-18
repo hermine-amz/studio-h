@@ -39,6 +39,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!commande.prospect_id) {
+      return NextResponse.json({ error: 'Cette commande n’est liée à aucune fiche client.' }, { status: 409 });
+    }
+
     const { data: prospect, error: prospectError } = await auth.supabase
       .from('prospects')
       .select('nom_marque, contact_nom, contact_email')
