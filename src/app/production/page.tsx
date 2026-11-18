@@ -1832,7 +1832,7 @@ function ProductionWorkshopContent() {
           style={{ zIndex: 2147483600 }}
           className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
         >
-          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="glass-modal w-full max-w-xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
                 <Video
@@ -2120,7 +2120,7 @@ function ProductionWorkshopContent() {
           style={{ zIndex: 2147483600 }}
           className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
         >
-          <div className="glass-card w-full max-w-lg p-5 sm:p-6 border border-stone-200 shadow-xl space-y-4">
+          <div className="glass-modal w-full max-w-lg p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <h3 className="text-base font-semibold text-zinc-900">
                 Modifier le titre et la description UGC

@@ -331,8 +331,11 @@ export default function PromptsLibraryPage() {
 
       {/* Modal: Add / Edit Prompt */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
-          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 shadow-xl">
+        <div
+          style={{ zIndex: 2147483600 }}
+          className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
+        >
+          <div className="glass-modal w-full max-w-xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
                 <Sparkles

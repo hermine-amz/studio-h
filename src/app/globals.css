@@ -64,6 +64,15 @@ body {
     @apply rounded-2xl transition-all duration-200 max-w-full overflow-hidden;
   }
 
+  .glass-modal {
+    background: #FFFFFF;
+    border: 1px solid rgba(24, 24, 27, 0.12);
+    box-shadow:
+      0 24px 50px -12px rgba(15, 23, 42, 0.28),
+      0 8px 20px -4px rgba(15, 23, 42, 0.12);
+    @apply rounded-2xl max-w-full;
+  }
+
   .glass-card:hover {
     box-shadow:
       0 16px 34px -6px rgba(15, 23, 42, 0.14),

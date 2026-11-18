@@ -35,7 +35,11 @@ import { useConfirm } from '@/context/ConfirmContext';
 import type { Prospect, ProspectStatut } from '@/types/database';
 import { formatEur, formatFcfa, daysSince } from '@/lib/currency';
 import { resolveIso2Code, getCountryByCode } from '@/lib/countries';
-import { CountryBadge, CountrySelect } from '@/components/ui/CountryFlag';
+import {
+  CountryBadge,
+  CountrySelect,
+  CountryFilterDropdown,
+} from '@/components/ui/CountryFlag';
 import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
@@ -130,15 +134,6 @@ export default function CrmPage() {
       });
     }
   };
-
-  // Distinct countries present in prospects + top default countries
-  const activeCountryCodes = useMemo(() => {
-    const codes = new Set<string>(['FR', 'CH', 'BE', 'GB', 'DE', 'IT', 'ES', 'CA', 'US']);
-    prospects.forEach((p) => {
-      if (p.pays) codes.add(resolveIso2Code(p.pays));
-    });
-    return Array.from(codes);
-  }, [prospects]);
 
   const filteredAndSortedProspects = useMemo(() => {
     const list = prospects.filter((p) => {
@@ -443,8 +438,8 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* Filter Bar (Search + Country Filter with Flags + Status Tabs) */}
-      <div className="glass-card p-4 space-y-3">
+      {/* Filter Bar (Search + Single Searchable Country Dropdown + Status Tabs) */}
+      <div className="glass-card overflow-visible relative z-20 p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search
@@ -463,41 +458,13 @@ export default function CrmPage() {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <Globe
-              className="h-4 w-4 text-zinc-500 shrink-0 mr-1"
-              strokeWidth={1.5}
-            />
-            <button
-              onClick={() => {
-                setCountryFilter('ALL');
-                setCurrentPage(1);
-              }}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all border shrink-0 ${
-                countryFilter === 'ALL'
-                  ? 'bg-[#568203] text-white border-[#568203]'
-                  : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
-              }`}
-            >
-              Tous Pays
-            </button>
-            {activeCountryCodes.map((code) => (
-              <button
-                key={code}
-                onClick={() => {
-                  setCountryFilter(code);
-                  setCurrentPage(1);
-                }}
-                className={`rounded-lg p-0.5 transition-all border shrink-0 ${
-                  countryFilter === code
-                    ? 'ring-2 ring-[#568203] border-[#568203]'
-                    : 'border-transparent opacity-80 hover:opacity-100'
-                }`}
-              >
-                <CountryBadge code={code} />
-              </button>
-            ))}
-          </div>
+          <CountryFilterDropdown
+            value={countryFilter}
+            onChange={(code) => {
+              setCountryFilter(code);
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
         {/* Status Quick Filter Pills */}
@@ -942,7 +909,7 @@ export default function CrmPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="glass-card w-full max-w-2xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
+            className="glass-modal w-full max-w-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto space-y-5"
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-stone-200">
@@ -1267,7 +1234,7 @@ export default function CrmPage() {
           style={{ zIndex: 2147483600 }}
           className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
         >
-          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="glass-modal w-full max-w-xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-stone-200/80">
               <div className="flex items-center gap-2.5">
                 <Building2
