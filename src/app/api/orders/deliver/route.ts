@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const { data: prospect, error: prospectError } = await auth.supabase
       .from('prospects')
-      .select('nom_marque, contact_nom, contact_email')
+      .select('nom_marque, contact_nom, contact_email, drive_folder_id')
       .eq('id', commande.prospect_id)
       .maybeSingle();
 
@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
 
     if (!folderId) {
       const folder = await createDriveFolder(
-        'Livraison_' + safeFolderPart(brandName) + '_' + safeFolderPart(packName)
+        'Livraison_' + safeFolderPart(brandName) + '_' + safeFolderPart(packName),
+        prospect.drive_folder_id || undefined
       );
       folderId = folder.folderId;
 
