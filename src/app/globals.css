@@ -18,7 +18,7 @@ html,
 body {
   background-color: #F8F9FA;
   color: #18181B;
-  font-size: 13.5px;
+  font-size: 14.5px;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
@@ -31,8 +31,8 @@ body {
 
 /* Custom subtle scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -50,22 +50,22 @@ body {
 
 @layer components {
   .glass-card {
-    @apply rounded-xl bg-white/95 backdrop-blur-md border border-stone-200/85 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
+    @apply rounded-2xl bg-white/95 backdrop-blur-md border border-stone-200/85 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
   }
 
   .glass-card-avocado {
-    @apply rounded-xl bg-gradient-to-r from-white via-white to-[#FFF8B9]/35 backdrop-blur-md border border-[#568203]/25 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
+    @apply rounded-2xl bg-gradient-to-r from-white via-white to-[#FFF8B9]/35 backdrop-blur-md border border-[#568203]/25 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
   }
 
   .glass-input {
-    @apply w-full max-w-full rounded-lg bg-white border border-stone-200/90 px-3 py-2 sm:py-1.5 text-[16px] sm:text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-[#568203] focus:ring-1 focus:ring-[#568203]/25 transition-all;
+    @apply w-full max-w-full rounded-xl bg-white border border-stone-200/90 px-3.5 py-2 text-[16px] sm:text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-[#568203] focus:ring-1 focus:ring-[#568203]/25 transition-all;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#568203] hover:bg-[#466A02] text-white border border-[#568203] px-3 py-2 sm:py-1.5 text-xs font-medium shadow-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#568203] hover:bg-[#466A02] text-white border border-[#568203] px-3.5 py-2 text-[13px] font-medium shadow-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-white hover:bg-[#FFF8B9]/40 text-zinc-700 border border-stone-200 px-3 py-2 sm:py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-[#FFF8B9]/40 text-zinc-700 border border-stone-200 px-3.5 py-2 text-[13px] font-medium transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
   }
 }

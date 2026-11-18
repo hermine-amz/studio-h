@@ -14,9 +14,15 @@ import {
   X,
   Building2,
   Globe,
+  Phone,
+  Mail,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
+import { useConfirm } from '@/context/ConfirmContext';
 import type { ProspectStatut } from '@/types/database';
 import {
   formatEur,
@@ -54,9 +60,11 @@ export default function CrmKanbanPage() {
     prospects,
     addProspect,
     updateProspectStatus,
+    deleteProspect,
     createProspectDriveFolder,
   } = useStudioData();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
@@ -64,16 +72,25 @@ export default function CrmKanbanPage() {
   const [dragOverCol, setDragOverCol] = useState<ProspectStatut | null>(null);
   const [creatingDriveId, setCreatingDriveId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
 
-  // New Prospect Form State
+  // Quick + Advanced Prospect Form State
   const [nomMarque, setNomMarque] = useState('');
   const [pays, setPays] = useState('FR');
   const [contactNom, setContactNom] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [contactTelephone, setContactTelephone] = useState('');
   const [lienBoutique, setLienBoutique] = useState('');
   const [statut, setStatut] = useState<ProspectStatut>('À contacter');
   const [valeurEstimee, setValeurEstimee] = useState('1500');
   const [notesStrategiques, setNotesStrategiques] = useState('');
+
+  // Optional initial links
+  const [lienPubInitial, setLienPubInitial] = useState('');
+  const [lienProduitInitial, setLienProduitInitial] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [tiktokUrl, setTiktokUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
 
   const filteredProspects = useMemo(() => {
     return prospects.filter((p) => {
@@ -117,25 +134,57 @@ export default function CrmKanbanPage() {
     }
   };
 
+  const requestStatusChange = async (
+    id: string,
+    targetCol: ProspectStatut
+  ) => {
+    const prospect = prospects.find((p) => p.id === id);
+    if (!prospect || prospect.statut === targetCol) return;
+
+    const ok = await confirm({
+      title: `Modifier le statut de ${prospect.nom_marque} ?`,
+      description: `Voulez-vous déplacer "${prospect.nom_marque}" du statut "${prospect.statut}" vers "${targetCol}" ?${
+        targetCol === 'Signé' && !prospect.drive_folder_id
+          ? ' Cela créera également son dossier client Google Drive.'
+          : ''
+      }`,
+      confirmLabel: 'Confirmer le changement',
+      variant: 'modify',
+    });
+
+    if (!ok) return;
+
+    toast({
+      title: `Statut mis à jour : ${targetCol}`,
+      description: `${prospect.nom_marque} est désormais dans "${targetCol}".`,
+    });
+
+    await updateProspectStatus(id, targetCol);
+  };
+
   const handleDrop = async (e: React.DragEvent, targetCol: ProspectStatut) => {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain') || draggedId;
     setDraggedId(null);
     setDragOverCol(null);
-
     if (!id) return;
-    const prospect = prospects.find((p) => p.id === id);
-    if (!prospect || prospect.statut === targetCol) return;
+    await requestStatusChange(id, targetCol);
+  };
 
-    toast({
-      title: `Statut mis à jour : ${targetCol}`,
-      description:
-        targetCol === 'Signé' && !prospect.drive_folder_id
-          ? `Création automatique du dossier Client_${prospect.nom_marque.replace(/\s+/g, '_')} sur Google Drive...`
-          : `${prospect.nom_marque} déplacé dans "${targetCol}".`,
+  const handleDeleteProspect = async (id: string, brandName: string) => {
+    const ok = await confirm({
+      title: `Supprimer le prospect ${brandName} ?`,
+      description: `Êtes-vous sûr de vouloir supprimer définitivement "${brandName}" ainsi que ses données associées ?`,
+      confirmLabel: 'Supprimer définitivement',
+      variant: 'danger',
     });
+    if (!ok) return;
 
-    await updateProspectStatus(id, targetCol);
+    await deleteProspect(id);
+    toast({
+      title: 'Prospect supprimé',
+      description: `${brandName} a été retiré du pipeline.`,
+    });
   };
 
   const handleManualDriveInit = async (
@@ -161,7 +210,17 @@ export default function CrmKanbanPage() {
       pays,
       contact_nom: contactNom.trim() || null,
       contact_email: contactEmail.trim() || null,
+      contact_telephone: contactTelephone.trim() || null,
       lien_boutique: lienBoutique.trim() || null,
+      liens_pubs: lienPubInitial.trim() ? [lienPubInitial.trim()] : [],
+      liens_produits: lienProduitInitial.trim()
+        ? [lienProduitInitial.trim()]
+        : [],
+      liens_reseaux: {
+        instagram: instagramUrl.trim() || undefined,
+        tiktok: tiktokUrl.trim() || undefined,
+        facebook: facebookUrl.trim() || undefined,
+      },
       statut,
       valeur_estimee_eur: Number(valeurEstimee) || 0,
       drive_folder_id: null,
@@ -169,14 +228,20 @@ export default function CrmKanbanPage() {
     });
 
     toast({
-      title: 'Prospect européen ajouté',
-      description: `${nomMarque} a été intégré dans la colonne "${statut}".`,
+      title: 'Prospect créé avec succès',
+      description: `Cliquez sur le nom "${nomMarque}" pour accéder à son onglet Liens Pubs, Produits & Réseaux.`,
     });
 
     setNomMarque('');
     setContactNom('');
     setContactEmail('');
+    setContactTelephone('');
     setLienBoutique('');
+    setLienPubInitial('');
+    setLienProduitInitial('');
+    setInstagramUrl('');
+    setTiktokUrl('');
+    setFacebookUrl('');
     setValeurEstimee('1500');
     setNotesStrategiques('');
     setIsAddModalOpen(false);
@@ -184,11 +249,11 @@ export default function CrmKanbanPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Skeleton className="h-24 w-full" />
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {KANBAN_COLUMNS.map((c) => (
-            <Skeleton key={c} className="h-[520px] w-full" />
+            <Skeleton key={c} className="h-[460px] w-full" />
           ))}
         </div>
       </div>
@@ -196,23 +261,21 @@ export default function CrmKanbanPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header & Pipeline Summary */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
         <div>
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Vue 02 — Acquisition & Clients Signés
           </span>
-          <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-zinc-900">
+          <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
             CRM & Pipeline Europe
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="glass-card px-4 py-2.5 flex items-center gap-3">
-            <span className="text-xs text-zinc-600">
-              Valeur Pipeline Actif :
-            </span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="glass-card px-4 py-2 flex items-center gap-2.5">
+            <span className="text-xs text-zinc-500">Pipeline Actif :</span>
             <CurrencyDisplay
               amountEur={totalPipelineEur}
               size="sm"
@@ -231,10 +294,10 @@ export default function CrmKanbanPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="glass-card p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+      <div className="glass-card p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
           <Search
-            className="h-4 w-4 text-zinc-400 absolute left-3.5 top-3"
+            className="h-4 w-4 text-zinc-400 absolute left-3.5 top-2.5"
             strokeWidth={1.5}
           />
           <input
@@ -242,11 +305,11 @@ export default function CrmKanbanPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher une marque, un contact ou un email..."
-            className="glass-input pl-10"
+            className="glass-input pl-9"
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           <Globe
             className="h-4 w-4 text-zinc-500 shrink-0 mr-1"
             strokeWidth={1.5}
@@ -255,20 +318,20 @@ export default function CrmKanbanPage() {
             <button
               key={code}
               onClick={() => setCountryFilter(code)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-mono uppercase transition-all border ${
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-mono uppercase transition-all border shrink-0 ${
                 countryFilter === code
-                  ? 'bg-[#568203] text-white border-[#568203]/40'
-                  : 'bg-stone-50/80 text-zinc-600 border-stone-200/85 hover:bg-[#FFF8B9]/60'
+                  ? 'bg-[#568203] text-white border-[#568203]'
+                  : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
               }`}
             >
-              {code === 'ALL' ? 'Tous Pays' : code}
+              {code === 'ALL' ? 'Tous' : code}
             </button>
           ))}
         </div>
       </div>
 
       {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 items-start">
         {KANBAN_COLUMNS.map((col) => {
           const colItems = filteredProspects.filter((p) => p.statut === col);
           const colTotalEur = colItems.reduce(
@@ -283,25 +346,25 @@ export default function CrmKanbanPage() {
               onDragOver={(e) => handleDragOver(e, col)}
               onDragLeave={() => setDragOverCol(null)}
               onDrop={(e) => handleDrop(e, col)}
-              className={`rounded-xl p-3.5 border transition-all min-h-[420px] flex flex-col ${
+              className={`rounded-2xl p-3.5 border transition-all min-h-[450px] flex flex-col ${
                 isDropTarget
-                  ? 'bg-[#FFF8B9]/[0.06] border-[#568203] shadow-glow'
+                  ? 'bg-[#FFF8B9]/40 border-[#568203]'
                   : col === 'Signé'
-                    ? 'bg-[#FFF8B9]/[0.04] border-[#568203]/30 backdrop-blur-md'
-                    : 'bg-stone-50/80 border-stone-200/85 backdrop-blur-md'
+                    ? 'bg-gradient-to-b from-white to-[#FFF8B9]/25 border-[#568203]/30 shadow-sm'
+                    : 'bg-white/85 border-stone-200/85 shadow-sm'
               }`}
             >
               {/* Column Header */}
-              <div className="pb-3 mb-3 border-b border-stone-200/85">
+              <div className="pb-2.5 mb-3 border-b border-stone-200/75">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-800">
                     {col}
                   </span>
-                  <span className="rounded-md bg-[#FFF8B9]/60 border border-stone-200 px-2 py-0.5 text-[11px] font-mono text-zinc-900">
+                  <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] font-mono text-zinc-700">
                     {colItems.length}
                   </span>
                 </div>
-                <div className="mt-1.5 text-[11px] text-zinc-500 font-mono">
+                <div className="mt-1 text-[11px] text-zinc-500 font-mono">
                   {formatEur(colTotalEur)} • {formatFcfa(colTotalEur)}
                 </div>
               </div>
@@ -309,7 +372,7 @@ export default function CrmKanbanPage() {
               {/* Cards Container */}
               <div className="space-y-3 flex-1">
                 {colItems.length === 0 ? (
-                  <div className="h-32 rounded-xl border border-dashed border-stone-200/85 flex items-center justify-center p-4 text-center text-[11px] text-zinc-400">
+                  <div className="h-28 rounded-xl border border-dashed border-stone-200 flex items-center justify-center p-3 text-center text-xs text-zinc-400">
                     Glisser une carte ici
                   </div>
                 ) : (
@@ -322,13 +385,15 @@ export default function CrmKanbanPage() {
                       prospect.statut !== 'Signé' &&
                       prospect.statut !== 'Perdu';
                     const countryCode = normalizeCountryCode(prospect.pays);
+                    const adsCount = prospect.liens_pubs?.length || 0;
+                    const prodsCount = prospect.liens_produits?.length || 0;
 
                     return (
                       <div
                         key={prospect.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, prospect.id)}
-                        className="group rounded-xl bg-white hover:bg-white backdrop-blur-md border border-stone-200 hover:border-[#568203]/50 p-3.5 shadow-glass transition-all cursor-grab active:cursor-grabbing space-y-3"
+                        className="group rounded-xl bg-white hover:bg-stone-50/60 border border-stone-200/90 hover:border-[#568203]/45 p-3.5 shadow-sm transition-all cursor-grab active:cursor-grabbing space-y-2.5"
                       >
                         {/* Top row: Brand + Country Code */}
                         <div className="flex items-start justify-between gap-2">
@@ -338,31 +403,60 @@ export default function CrmKanbanPage() {
                               strokeWidth={1.5}
                             />
                             <Link
-                              href={`/crm/${prospect.id}`}
-                              className="text-sm font-semibold text-zinc-900 hover:underline leading-snug truncate"
+                              href={`/crm/${prospect.id}?tab=infos`}
+                              className="text-[13.5px] font-semibold text-zinc-900 hover:text-[#568203] hover:underline leading-snug truncate"
+                              title="Ouvrir la fiche et les liens du prospect"
                             >
                               {prospect.nom_marque}
                             </Link>
                           </div>
 
-                          <span className="shrink-0 rounded bg-[#FFF8B9]/[0.08] border border-[#568203]/30 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-zinc-900">
+                          <span className="shrink-0 rounded-md bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-zinc-700">
                             {countryCode}
                           </span>
                         </div>
 
-                        {/* Contact Name */}
-                        {prospect.contact_nom && (
-                          <p className="text-xs text-zinc-600 truncate">
-                            {prospect.contact_nom}
-                          </p>
+                        {/* Contact Details preview */}
+                        {(prospect.contact_nom ||
+                          prospect.contact_email ||
+                          prospect.contact_telephone) && (
+                          <div className="space-y-1 text-xs text-zinc-500">
+                            {prospect.contact_nom && (
+                              <p className="truncate font-medium text-zinc-700">
+                                {prospect.contact_nom}
+                              </p>
+                            )}
+                            {prospect.contact_email && (
+                              <p className="flex items-center gap-1 truncate text-[11px]">
+                                <Mail
+                                  className="h-3 w-3 shrink-0"
+                                  strokeWidth={1.5}
+                                />
+                                <span className="truncate">
+                                  {prospect.contact_email}
+                                </span>
+                              </p>
+                            )}
+                            {prospect.contact_telephone && (
+                              <p className="flex items-center gap-1 truncate text-[11px]">
+                                <Phone
+                                  className="h-3 w-3 shrink-0"
+                                  strokeWidth={1.5}
+                                />
+                                <span className="truncate">
+                                  {prospect.contact_telephone}
+                                </span>
+                              </p>
+                            )}
+                          </div>
                         )}
 
                         {/* Estimated Value in EUR + FCFA */}
-                        <div className="rounded-lg bg-stone-50/80 border border-stone-200/85 p-2.5">
-                          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                        <div className="rounded-lg bg-stone-50 border border-stone-200/80 p-2.5">
+                          <div className="text-[10px] uppercase tracking-wider text-zinc-400">
                             Valeur estimée
                           </div>
-                          <div className="text-sm font-semibold text-zinc-900 mt-0.5">
+                          <div className="text-[13.5px] font-semibold text-zinc-900 mt-0.5">
                             {formatEur(prospect.valeur_estimee_eur)}
                           </div>
                           <div className="text-[11px] font-mono text-zinc-500">
@@ -370,11 +464,27 @@ export default function CrmKanbanPage() {
                           </div>
                         </div>
 
+                        {/* Badges for Ads & Products count if present */}
+                        {(adsCount > 0 || prodsCount > 0) && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {adsCount > 0 && (
+                              <span className="rounded-md bg-[#FFF8B9]/70 border border-[#568203]/20 px-2 py-0.5 text-[10px] font-medium text-zinc-800">
+                                {adsCount} pub{adsCount > 1 ? 's' : ''} FB
+                              </span>
+                            )}
+                            {prodsCount > 0 && (
+                              <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[10px] font-medium text-zinc-700">
+                                {prodsCount} produit{prodsCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         {/* Alert Indicator (> 3 days without contact) */}
                         {isStale && (
-                          <div className="flex items-center gap-1.5 rounded-lg bg-[#FFF8B9]/[0.06] border border-[#568203]/40 px-2.5 py-1.5 text-[11px] text-zinc-900">
+                          <div className="flex items-center gap-1.5 rounded-lg bg-[#FFF8B9]/65 border border-[#568203]/30 px-2.5 py-1.5 text-[11px] text-zinc-800">
                             <AlertCircle
-                              className="h-3.5 w-3.5 shrink-0 text-zinc-900"
+                              className="h-3.5 w-3.5 shrink-0 text-[#568203]"
                               strokeWidth={1.5}
                             />
                             <span>Sans suivi depuis {inactiveDays} j</span>
@@ -382,19 +492,19 @@ export default function CrmKanbanPage() {
                         )}
 
                         {/* Drive Folder Status / Quick Action */}
-                        <div className="pt-2 border-t border-stone-200/70 flex items-center justify-between gap-2">
+                        <div className="pt-2 border-t border-stone-200/70 flex items-center justify-between gap-1.5">
                           {prospect.drive_folder_id ? (
                             <a
                               href={`https://drive.google.com/drive/folders/${prospect.drive_folder_id}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] text-zinc-700 hover:text-zinc-900"
+                              className="inline-flex items-center gap-1 text-[11px] text-[#568203] font-medium hover:underline"
                             >
                               <FolderCheck
-                                className="h-3.5 w-3.5 text-zinc-900"
+                                className="h-3.5 w-3.5"
                                 strokeWidth={1.5}
                               />
-                              <span>Drive actif</span>
+                              <span>Drive</span>
                               <ExternalLink
                                 className="h-3 w-3"
                                 strokeWidth={1.5}
@@ -407,7 +517,7 @@ export default function CrmKanbanPage() {
                               onClick={(e) =>
                                 handleManualDriveInit(e, prospect.id)
                               }
-                              className="inline-flex items-center gap-1 text-[11px] text-zinc-600 hover:text-zinc-900 transition-colors"
+                              className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 transition-colors"
                             >
                               <FolderPlus
                                 className="h-3.5 w-3.5"
@@ -421,37 +531,48 @@ export default function CrmKanbanPage() {
                             </button>
                           )}
 
-                          <Link
-                            href={`/crm/${prospect.id}`}
-                            className="inline-flex items-center gap-1 rounded-lg bg-stone-100/80 hover:bg-[#568203] border border-stone-200 px-2 py-1 text-[11px] font-medium text-zinc-900 transition-colors"
-                          >
-                            <span>360°</span>
-                            <ArrowUpRight
-                              className="h-3 w-3"
-                              strokeWidth={1.5}
-                            />
-                          </Link>
+                          <div className="flex items-center gap-1">
+                            <Link
+                              href={`/crm/${prospect.id}?tab=infos`}
+                              className="inline-flex items-center gap-1 rounded-lg bg-stone-100 hover:bg-[#568203] hover:text-white border border-stone-200 px-2 py-1 text-[11px] font-medium text-zinc-800 transition-colors"
+                            >
+                              <span>Fiche & Liens</span>
+                              <ArrowUpRight
+                                className="h-3 w-3"
+                                strokeWidth={1.5}
+                              />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteProspect(
+                                  prospect.id,
+                                  prospect.nom_marque
+                                )
+                              }
+                              className="rounded-lg p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              aria-label="Supprimer le prospect"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Quick Status Select for accessible one-click transitions */}
+                        {/* Quick Status Select (with Confirmation Modal) */}
                         <div>
                           <select
                             aria-label={`Changer le statut de ${prospect.nom_marque}`}
                             value={prospect.statut}
                             onChange={(e) =>
-                              updateProspectStatus(
+                              requestStatusChange(
                                 prospect.id,
                                 e.target.value as ProspectStatut
                               )
                             }
-                            className="w-full rounded-lg bg-white border border-stone-200 px-2 py-1 text-[11px] text-zinc-700 focus:outline-none focus:border-[#568203]"
+                            className="w-full rounded-lg bg-stone-50 border border-stone-200 px-2 py-1.5 text-xs text-zinc-700 focus:outline-none focus:border-[#568203]"
                           >
                             {KANBAN_COLUMNS.map((st) => (
-                              <option
-                                key={st}
-                                value={st}
-                                className="bg-white text-zinc-900"
-                              >
+                              <option key={st} value={st}>
                                 Statut : {st}
                               </option>
                             ))}
@@ -467,32 +588,37 @@ export default function CrmKanbanPage() {
         })}
       </div>
 
-      {/* Modal: Add Prospect */}
+      {/* Modal: Quick Add Prospect + Optional Links */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/35 backdrop-blur-md p-4">
-          <div className="glass-card w-full max-w-lg p-4 sm:p-3.5 border border-[#568203]/30 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200/85">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-stone-200/80">
               <div className="flex items-center gap-2.5">
                 <Building2
-                  className="h-5 w-5 text-zinc-900"
+                  className="h-5 w-5 text-[#568203]"
                   strokeWidth={1.5}
                 />
-                <h2 className="text-lg font-semibold text-zinc-900">
-                  Ajouter un Prospect / Client Européen
-                </h2>
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900">
+                    Création Rapide d’un Prospect
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    Vous pourrez aussi compléter tous les liens (Pubs FB, Produits, Réseaux) en cliquant sur son nom
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
-                className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100/80"
+                className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-800 hover:bg-stone-100"
               >
                 <X className="h-5 w-5" strokeWidth={1.5} />
               </button>
             </div>
 
             <form onSubmit={handleCreateProspect} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Nom de la marque *
                   </label>
                   <input
@@ -506,7 +632,7 @@ export default function CrmKanbanPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Code Pays
                   </label>
                   <select
@@ -515,11 +641,7 @@ export default function CrmKanbanPage() {
                     className="glass-input"
                   >
                     {EUROPEAN_COUNTRIES.map((c) => (
-                      <option
-                        key={c.code}
-                        value={c.code}
-                        className="bg-white text-zinc-900"
-                      >
+                      <option key={c.code} value={c.code}>
                         {c.label}
                       </option>
                     ))}
@@ -527,23 +649,23 @@ export default function CrmKanbanPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Nom du contact
                   </label>
                   <input
                     type="text"
                     value={contactNom}
                     onChange={(e) => setContactNom(e.target.value)}
-                    placeholder="Ex: Camille Rochefort"
+                    placeholder="Camille Rochefort"
                     className="glass-input"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
-                    Email du contact
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                    Email
                   </label>
                   <input
                     type="email"
@@ -553,11 +675,24 @@ export default function CrmKanbanPage() {
                     className="glass-input"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                    Téléphone / WhatsApp
+                  </label>
+                  <input
+                    type="tel"
+                    value={contactTelephone}
+                    onChange={(e) => setContactTelephone(e.target.value)}
+                    placeholder="+33 6 12 34 56 78"
+                    className="glass-input"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Valeur estimée (€)
                   </label>
                   <input
@@ -574,7 +709,7 @@ export default function CrmKanbanPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Statut initial
                   </label>
                   <select
@@ -585,11 +720,7 @@ export default function CrmKanbanPage() {
                     className="glass-input"
                   >
                     {KANBAN_COLUMNS.map((st) => (
-                      <option
-                        key={st}
-                        value={st}
-                        className="bg-white text-zinc-900"
-                      >
+                      <option key={st} value={st}>
                         {st}
                       </option>
                     ))}
@@ -598,7 +729,7 @@ export default function CrmKanbanPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Lien boutique e-commerce
                 </label>
                 <input
@@ -610,12 +741,99 @@ export default function CrmKanbanPage() {
                 />
               </div>
 
+              {/* Optional expandable section for Ads, Products & Socials right away */}
+              <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFields((prev) => !prev)}
+                  className="w-full flex items-center justify-between text-xs font-semibold text-zinc-800"
+                >
+                  <span>
+                    + Ajouter des liens Pubs Facebook, Produits & Réseaux Sociaux (Optionnel)
+                  </span>
+                  {showAdvancedFields ? (
+                    <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+                  )}
+                </button>
+
+                {showAdvancedFields && (
+                  <div className="mt-3.5 pt-3.5 border-t border-stone-200/80 space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                        Lien Pub Facebook / Meta Ad Library
+                      </label>
+                      <input
+                        type="url"
+                        value={lienPubInitial}
+                        onChange={(e) => setLienPubInitial(e.target.value)}
+                        placeholder="https://www.facebook.com/ads/library/?id=..."
+                        className="glass-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                        Lien du Produit concerné (Optionnel)
+                      </label>
+                      <input
+                        type="url"
+                        value={lienProduitInitial}
+                        onChange={(e) => setLienProduitInitial(e.target.value)}
+                        placeholder="https://marque.eu/products/serum-eclat"
+                        className="glass-input"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                          Instagram
+                        </label>
+                        <input
+                          type="url"
+                          value={instagramUrl}
+                          onChange={(e) => setInstagramUrl(e.target.value)}
+                          placeholder="https://instagram.com/..."
+                          className="glass-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                          TikTok
+                        </label>
+                        <input
+                          type="url"
+                          value={tiktokUrl}
+                          onChange={(e) => setTiktokUrl(e.target.value)}
+                          placeholder="https://tiktok.com/@..."
+                          className="glass-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                          Page Facebook
+                        </label>
+                        <input
+                          type="url"
+                          value={facebookUrl}
+                          onChange={(e) => setFacebookUrl(e.target.value)}
+                          placeholder="https://facebook.com/..."
+                          className="glass-input"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Notes stratégiques & Direction créative
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={notesStrategiques}
                   onChange={(e) => setNotesStrategiques(e.target.value)}
                   placeholder="Esthétique de marque, angles publicitaires, tonalité..."
@@ -623,7 +841,7 @@ export default function CrmKanbanPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-200/85">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-200/80">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
@@ -633,7 +851,7 @@ export default function CrmKanbanPage() {
                 </button>
                 <button type="submit" className="btn-primary">
                   <Plus className="h-4 w-4" strokeWidth={1.5} />
-                  <span>Enregistrer le prospect</span>
+                  <span>Créer le prospect</span>
                 </button>
               </div>
             </form>
@@ -643,4 +861,3 @@ export default function CrmKanbanPage() {
     </div>
   );
 }
-

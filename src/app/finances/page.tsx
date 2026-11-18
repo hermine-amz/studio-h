@@ -13,17 +13,24 @@ import {
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
+import { useConfirm } from '@/context/ConfirmContext';
 import type { TypeFinance } from '@/types/database';
 import { formatEur, formatFcfa } from '@/lib/currency';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 export default function FinancesPage() {
-  const { isLoading, finances, commandes, prospects, addFinance, deleteFinance } =
-    useStudioData();
+  const {
+    isLoading,
+    finances,
+    commandes,
+    prospects,
+    addFinance,
+    deleteFinance,
+  } = useStudioData();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
 
-  // Quick Form State
   const [type, setType] = useState<TypeFinance>('Dépense');
   const [libelle, setLibelle] = useState('');
   const [montantEur, setMontantEur] = useState('');
@@ -31,7 +38,6 @@ export default function FinancesPage() {
     new Date().toISOString().split('T')[0]
   );
 
-  // Manual Revenues + Paid Orders Synchronization
   const manualRevenus = useMemo(
     () => finances.filter((f) => f.type === 'Revenu'),
     [finances]
@@ -114,41 +120,62 @@ export default function FinancesPage() {
     setMontantEur('');
   };
 
+  const handleDeleteTransaction = async (
+    id: string,
+    label: string,
+    txType: string
+  ) => {
+    const ok = await confirm({
+      title: `Supprimer ce ${txType.toLowerCase()} ?`,
+      description: `Voulez-vous supprimer définitivement l'écriture "${label}" de votre trésorerie ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    await deleteFinance(id);
+    toast({
+      title: 'Écriture supprimée',
+    });
+  };
+
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-36 w-full" />
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
         </div>
-        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-80 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
       <div>
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
           Vue 06 — Pilotage Financier Bimonétaire (EUR / XOF)
         </span>
-        <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-zinc-900">
+        <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
           Trésorerie & Rentabilité
         </h1>
       </div>
 
       {/* 1. Three Synthesis KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        {/* Total Collected Revenues */}
-        <div className="glass-card p-4 space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
               Revenus Totaux Encaissés
             </span>
-            <div className="rounded-xl bg-[#FFF8B9]/[0.06] border border-stone-300 p-2">
-              <TrendingUp className="h-5 w-5 text-zinc-900" strokeWidth={1.5} />
+            <div className="rounded-xl bg-[#FFF8B9]/70 border border-[#568203]/25 p-2">
+              <TrendingUp
+                className="h-4 w-4 text-[#568203]"
+                strokeWidth={1.5}
+              />
             </div>
           </div>
           <CurrencyDisplay amountEur={totalRevenusEur} size="xl" />
@@ -157,15 +184,14 @@ export default function FinancesPage() {
           </p>
         </div>
 
-        {/* Total Expenses (AI Tool Subscriptions) */}
-        <div className="glass-card p-4 space-y-3">
+        <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
               Dépenses Totales (Outils IA & Infra)
             </span>
-            <div className="rounded-xl bg-stone-100/80 border border-stone-200 p-2">
+            <div className="rounded-xl bg-stone-100 border border-stone-200 p-2">
               <TrendingDown
-                className="h-5 w-5 text-zinc-900"
+                className="h-4 w-4 text-zinc-700"
                 strokeWidth={1.5}
               />
             </div>
@@ -176,34 +202,33 @@ export default function FinancesPage() {
           </p>
         </div>
 
-        {/* Net Profit */}
-        <div className="glass-card-avocado p-4 space-y-3 border border-[#568203]/40">
+        <div className="glass-card-avocado p-5 space-y-2.5 border border-[#568203]/35">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900">
               Bénéfice Net Réel Studio H
             </span>
-            <div className="rounded-xl bg-[#568203] border border-[#568203]/40 p-2 shadow-glow">
-              <Wallet className="h-5 w-5 text-zinc-900" strokeWidth={1.5} />
+            <div className="rounded-xl bg-[#568203] p-2">
+              <Wallet className="h-4 w-4 text-white" strokeWidth={1.5} />
             </div>
           </div>
           <CurrencyDisplay amountEur={beneficeNetEur} size="xl" />
-          <p className="text-xs text-zinc-700">
-            Marge nette disponible (Taux fixe : 1 € = 655,957 FCFA)
+          <p className="text-xs text-zinc-600">
+            Marge nette disponible (1 € = 655,957 FCFA)
           </p>
         </div>
       </div>
 
       {/* 2. Quick Add Transaction Form */}
-      <section className="glass-card p-4">
-        <h2 className="text-base font-semibold text-zinc-900 mb-4">
+      <section className="glass-card p-5">
+        <h2 className="text-[15px] font-semibold text-zinc-900 mb-3.5">
           Ajouter rapidement un Revenu ou une Dépense
         </h2>
         <form
           onSubmit={handleAddTransaction}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
         >
           <div className="lg:col-span-2">
-            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1.5">
+            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Type
             </label>
             <select
@@ -211,17 +236,13 @@ export default function FinancesPage() {
               onChange={(e) => setType(e.target.value as TypeFinance)}
               className="glass-input"
             >
-              <option value="Dépense" className="bg-white">
-                Dépense
-              </option>
-              <option value="Revenu" className="bg-white">
-                Revenu
-              </option>
+              <option value="Dépense">Dépense</option>
+              <option value="Revenu">Revenu</option>
             </select>
           </div>
 
           <div className="lg:col-span-4">
-            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1.5">
+            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Libellé de l’opération *
             </label>
             <input
@@ -239,7 +260,7 @@ export default function FinancesPage() {
           </div>
 
           <div className="lg:col-span-2">
-            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1.5">
+            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Montant (€) *
             </label>
             <input
@@ -255,7 +276,7 @@ export default function FinancesPage() {
           </div>
 
           <div className="lg:col-span-2">
-            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1.5">
+            <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Date
             </label>
             <input
@@ -276,17 +297,16 @@ export default function FinancesPage() {
       </section>
 
       {/* 3. Double Table: Revenues & Recurring AI Expenses */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-        {/* Table 1: Revenus Encaissés */}
-        <section className="glass-card p-4 space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200/85">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <section className="glass-card p-5 space-y-3.5">
+          <div className="flex items-center justify-between pb-3.5 border-b border-stone-200/85">
             <div className="flex items-center gap-2.5">
               <ArrowUpRight
-                className="h-5 w-5 text-zinc-900"
+                className="h-5 w-5 text-[#568203]"
                 strokeWidth={1.5}
               />
               <div>
-                <h2 className="text-base font-semibold text-zinc-900">
+                <h2 className="text-[15px] font-semibold text-zinc-900">
                   Journal des Revenus Encaissés
                 </h2>
                 <p className="text-xs text-zinc-500">
@@ -294,34 +314,34 @@ export default function FinancesPage() {
                 </p>
               </div>
             </div>
-            <span className="rounded-lg bg-[#568203] border border-[#568203]/30 px-2.5 py-1 text-xs font-mono text-zinc-900">
-              {combinedRevenus.length} entrée{combinedRevenus.length > 1 ? 's' : ''}
+            <span className="rounded-lg bg-[#568203] px-2.5 py-1 text-xs font-mono text-white">
+              {combinedRevenus.length}
             </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {combinedRevenus.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-stone-200/85 p-4 text-center text-xs text-zinc-500">
+              <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
                 Aucun revenu encaissé enregistré.
               </div>
             ) : (
               combinedRevenus.map((rev) => (
                 <div
                   key={rev.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 p-3.5"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 px-3.5 py-3"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-900 truncate">
+                      <span className="text-[13px] font-medium text-zinc-900 truncate">
                         {rev.libelle}
                       </span>
                       {rev.isSyncedOrder && (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#FFF8B9]/[0.06] border border-stone-300 px-1.5 py-0.5 text-[10px] text-zinc-900">
+                        <span className="inline-flex items-center gap-1 rounded bg-[#FFF8B9]/80 border border-[#568203]/25 px-1.5 py-0.5 text-[10px] text-zinc-800">
                           <CheckCircle2
-                            className="h-3 w-3"
+                            className="h-3 w-3 text-[#568203]"
                             strokeWidth={1.5}
                           />
-                          Sync Commande
+                          Sync
                         </span>
                       )}
                     </div>
@@ -330,9 +350,9 @@ export default function FinancesPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 shrink-0">
                     <div className="text-right">
-                      <div className="text-sm font-semibold text-zinc-900">
+                      <div className="text-[13.5px] font-semibold text-zinc-900">
                         + {formatEur(rev.montant_eur)}
                       </div>
                       <div className="text-[11px] font-mono text-zinc-500">
@@ -342,8 +362,10 @@ export default function FinancesPage() {
 
                     {!rev.isSyncedOrder && (
                       <button
-                        onClick={() => deleteFinance(rev.id)}
-                        className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-stone-100/80"
+                        onClick={() =>
+                          handleDeleteTransaction(rev.id, rev.libelle, 'Revenu')
+                        }
+                        className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
                         aria-label="Supprimer le revenu"
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={1.5} />
@@ -356,16 +378,15 @@ export default function FinancesPage() {
           </div>
         </section>
 
-        {/* Table 2: Dépenses & Abonnements IA */}
-        <section className="glass-card p-4 space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200/85">
+        <section className="glass-card p-5 space-y-3.5">
+          <div className="flex items-center justify-between pb-3.5 border-b border-stone-200/85">
             <div className="flex items-center gap-2.5">
               <ArrowDownRight
-                className="h-5 w-5 text-zinc-900"
+                className="h-5 w-5 text-zinc-700"
                 strokeWidth={1.5}
               />
               <div>
-                <h2 className="text-base font-semibold text-zinc-900">
+                <h2 className="text-[15px] font-semibold text-zinc-900">
                   Dépenses & Abonnements Outils IA
                 </h2>
                 <p className="text-xs text-zinc-500">
@@ -373,24 +394,24 @@ export default function FinancesPage() {
                 </p>
               </div>
             </div>
-            <span className="rounded-lg bg-stone-100/80 border border-stone-200 px-2.5 py-1 text-xs font-mono text-zinc-900">
-              {depenses.length} dépense{depenses.length > 1 ? 's' : ''}
+            <span className="rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs font-mono text-zinc-800">
+              {depenses.length}
             </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {depenses.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-stone-200/85 p-4 text-center text-xs text-zinc-500">
+              <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
                 Aucune dépense enregistrée.
               </div>
             ) : (
               depenses.map((dep) => (
                 <div
                   key={dep.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 p-3.5"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 px-3.5 py-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-zinc-900 truncate">
+                    <div className="text-[13px] font-medium text-zinc-900 truncate">
                       {dep.libelle}
                     </div>
                     <div className="text-xs font-mono text-zinc-500 mt-0.5">
@@ -398,9 +419,9 @@ export default function FinancesPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 shrink-0">
                     <div className="text-right">
-                      <div className="text-sm font-semibold text-zinc-900">
+                      <div className="text-[13.5px] font-semibold text-zinc-900">
                         - {formatEur(dep.montant_eur)}
                       </div>
                       <div className="text-[11px] font-mono text-zinc-500">
@@ -409,8 +430,10 @@ export default function FinancesPage() {
                     </div>
 
                     <button
-                      onClick={() => deleteFinance(dep.id)}
-                      className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-stone-100/80"
+                      onClick={() =>
+                        handleDeleteTransaction(dep.id, dep.libelle, 'Dépense')
+                      }
+                      className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
                       aria-label="Supprimer la dépense"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={1.5} />
@@ -425,4 +448,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-

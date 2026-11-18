@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
+import { useConfirm } from '@/context/ConfirmContext';
 import type { CategoriePrompt, PromptScript } from '@/types/database';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -28,6 +29,7 @@ export default function PromptsLibraryPage() {
   const { isLoading, prompts, addPrompt, updatePrompt, deletePrompt } =
     useStudioData();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const [selectedCategory, setSelectedCategory] = useState<
     CategoriePrompt | 'ALL'
@@ -36,7 +38,6 @@ export default function PromptsLibraryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Modal State (Add / Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptScript | null>(null);
   const [titre, setTitre] = useState('');
@@ -72,7 +73,7 @@ export default function PromptsLibraryPage() {
       setCopiedId(prompt.id);
       toast({
         title: 'Prompt copié dans le presse-papiers',
-        description: `« ${prompt.titre} » est prêt à être collé dans votre outil IA.`,
+        description: `« ${prompt.titre} » est prêt à être collé.`,
         type: 'success',
       });
       setTimeout(() => setCopiedId(null), 2000);
@@ -103,11 +104,34 @@ export default function PromptsLibraryPage() {
     setIsModalOpen(true);
   };
 
+  const handleDeletePromptWithConfirm = async (item: PromptScript) => {
+    const ok = await confirm({
+      title: `Supprimer le prompt "${item.titre}" ?`,
+      description: `Voulez-vous supprimer définitivement ce prompt de votre bibliothèque ?`,
+      confirmLabel: 'Supprimer le prompt',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    await deletePrompt(item.id);
+    toast({
+      title: 'Prompt supprimé',
+    });
+  };
+
   const handleSavePrompt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titre.trim() || !contenuTexte.trim()) return;
 
     if (editingPrompt) {
+      const ok = await confirm({
+        title: `Modifier le prompt "${editingPrompt.titre}" ?`,
+        description:
+          'Confirmez-vous l’enregistrement des modifications sur ce prompt / script ?',
+        confirmLabel: 'Confirmer la modification',
+        variant: 'modify',
+      });
+      if (!ok) return;
+
       await updatePrompt(editingPrompt.id, {
         titre: titre.trim(),
         categorie,
@@ -136,9 +160,9 @@ export default function PromptsLibraryPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Skeleton className="h-24 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -147,14 +171,14 @@ export default function PromptsLibraryPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Vue 05 — Capital Intellectuel & Ingénierie Créative
           </span>
-          <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-zinc-900">
+          <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
             Bibliothèque de Prompts & Scripts
           </h1>
         </div>
@@ -166,19 +190,18 @@ export default function PromptsLibraryPage() {
       </div>
 
       {/* Filters Bar */}
-      <div className="glass-card p-4 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Categories */}
+      <div className="glass-card p-3.5 space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
             <button
               onClick={() => setSelectedCategory('ALL')}
               className={`rounded-xl px-3.5 py-2 text-xs font-medium border transition-all shrink-0 ${
                 selectedCategory === 'ALL'
-                  ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
-                  : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
+                  ? 'bg-[#568203] text-white border-[#568203]'
+                  : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
               }`}
             >
-              Toutes catégories ({prompts.length})
+              Toutes ({prompts.length})
             </button>
             {CATEGORIES.map((cat) => (
               <button
@@ -186,8 +209,8 @@ export default function PromptsLibraryPage() {
                 onClick={() => setSelectedCategory(cat)}
                 className={`rounded-xl px-3.5 py-2 text-xs font-medium border transition-all shrink-0 ${
                   selectedCategory === cat
-                    ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
-                    : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
                 }`}
               >
                 {cat}
@@ -195,11 +218,10 @@ export default function PromptsLibraryPage() {
             ))}
           </div>
 
-          {/* Search + Niche Filter */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <div className="relative">
               <Search
-                className="h-4 w-4 text-zinc-400 absolute left-3.5 top-3"
+                className="h-4 w-4 text-zinc-400 absolute left-3.5 top-2.5"
                 strokeWidth={1.5}
               />
               <input
@@ -207,20 +229,18 @@ export default function PromptsLibraryPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Rechercher un prompt..."
-                className="glass-input pl-10 sm:w-64"
+                className="glass-input pl-9 sm:w-60"
               />
             </div>
 
             <select
               value={selectedNiche}
               onChange={(e) => setSelectedNiche(e.target.value)}
-              className="glass-input sm:w-52"
+              className="glass-input sm:w-48"
             >
-              <option value="ALL" className="bg-white">
-                Toutes les niches
-              </option>
+              <option value="ALL">Toutes les niches</option>
               {allNiches.map((n) => (
-                <option key={n} value={n} className="bg-white">
+                <option key={n} value={n}>
                   {n}
                 </option>
               ))}
@@ -231,25 +251,25 @@ export default function PromptsLibraryPage() {
 
       {/* Prompts Grid */}
       {filteredPrompts.length === 0 ? (
-        <div className="glass-card p-12 text-center text-sm text-zinc-500">
-          Aucun prompt ou script ne correspond à vos filtres.
+        <div className="glass-card p-10 text-center text-sm text-zinc-500">
+          Aucun prompt ou script enregistré. Cliquez sur « Nouveau Prompt / Script » pour commencer.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filteredPrompts.map((item) => {
             const isCopied = copiedId === item.id;
             return (
               <div
                 key={item.id}
-                className="glass-card p-4 flex flex-col justify-between space-y-4 hover:border-[#568203]/45"
+                className="glass-card p-5 flex flex-col justify-between space-y-4 hover:border-[#568203]/45"
               >
                 <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-lg bg-[#568203] border border-[#568203]/30 px-2.5 py-1 text-xs font-medium text-zinc-900">
+                      <span className="rounded-lg bg-[#568203] px-2.5 py-1 text-xs font-medium text-white">
                         {item.categorie}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-stone-100/80 border border-stone-200 px-2.5 py-1 text-xs text-zinc-700">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-700">
                         <Tag className="h-3 w-3" strokeWidth={1.5} />
                         {item.niche}
                       </span>
@@ -258,14 +278,14 @@ export default function PromptsLibraryPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => openEditModal(item)}
-                        className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100/80 transition-colors"
+                        className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100 transition-colors"
                         aria-label="Modifier le prompt"
                       >
                         <Pencil className="h-4 w-4" strokeWidth={1.5} />
                       </button>
                       <button
-                        onClick={() => deletePrompt(item.id)}
-                        className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100/80 transition-colors"
+                        onClick={() => handleDeletePromptWithConfirm(item)}
+                        className="rounded-lg p-1.5 text-zinc-500 hover:text-red-600 hover:bg-red-50 transition-colors"
                         aria-label="Supprimer le prompt"
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={1.5} />
@@ -273,22 +293,22 @@ export default function PromptsLibraryPage() {
                     </div>
                   </div>
 
-                  <h3 className="text-base font-semibold text-zinc-900">
+                  <h3 className="text-[15px] font-semibold text-zinc-900">
                     {item.titre}
                   </h3>
 
-                  <pre className="rounded-xl bg-stone-50 border border-stone-200/85 p-4 text-xs text-zinc-800 font-mono whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+                  <pre className="rounded-xl bg-stone-50 border border-stone-200/85 p-3.5 text-xs text-zinc-800 font-mono whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
                     {item.contenu_texte}
                   </pre>
                 </div>
 
-                <div className="pt-3 border-t border-stone-200/85 flex items-center justify-between">
-                  <span className="text-[11px] text-zinc-500">
+                <div className="pt-3 border-t border-stone-200/80 flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">
                     Prêt pour génération IA
                   </span>
                   <button
                     onClick={() => handleCopyPrompt(item)}
-                    className="btn-primary py-2 px-4 text-xs"
+                    className="btn-primary py-1.5 px-3.5 text-xs"
                   >
                     {isCopied ? (
                       <>
@@ -311,15 +331,15 @@ export default function PromptsLibraryPage() {
 
       {/* Modal: Add / Edit Prompt */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/35 backdrop-blur-md p-4">
-          <div className="glass-card w-full max-w-xl p-4 sm:p-3.5 border border-[#568203]/30">
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-200/85">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 shadow-xl">
+            <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
                 <Sparkles
-                  className="h-5 w-5 text-zinc-900"
+                  className="h-5 w-5 text-[#568203]"
                   strokeWidth={1.5}
                 />
-                <h2 className="text-lg font-semibold text-zinc-900">
+                <h2 className="text-base font-semibold text-zinc-900">
                   {editingPrompt
                     ? 'Modifier le Prompt / Script'
                     : 'Ajouter un Prompt / Script'}
@@ -327,7 +347,7 @@ export default function PromptsLibraryPage() {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-zinc-500 hover:text-zinc-900"
+                className="rounded-lg p-1 text-zinc-400 hover:text-zinc-800"
               >
                 <X className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -335,7 +355,7 @@ export default function PromptsLibraryPage() {
 
             <form onSubmit={handleSavePrompt} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Titre du Prompt ou Script *
                 </label>
                 <input
@@ -348,9 +368,9 @@ export default function PromptsLibraryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Catégorie *
                   </label>
                   <select
@@ -361,11 +381,7 @@ export default function PromptsLibraryPage() {
                     className="glass-input"
                   >
                     {CATEGORIES.map((c) => (
-                      <option
-                        key={c}
-                        value={c}
-                        className="bg-white text-zinc-900"
-                      >
+                      <option key={c} value={c}>
                         {c}
                       </option>
                     ))}
@@ -373,7 +389,7 @@ export default function PromptsLibraryPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                     Niche / Secteur
                   </label>
                   <input
@@ -387,7 +403,7 @@ export default function PromptsLibraryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Contenu du Prompt / Script *
                 </label>
                 <textarea
@@ -400,7 +416,7 @@ export default function PromptsLibraryPage() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-stone-200/85">
+              <div className="flex justify-end gap-2.5 pt-3.5 border-t border-stone-200/85">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -419,4 +435,3 @@ export default function PromptsLibraryPage() {
     </div>
   );
 }
-

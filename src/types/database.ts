@@ -29,13 +29,25 @@ export type TypeFocusTache = 'tache_jour' | 'boite_idee';
 
 export type UrgenceNiveau = 'Critique' | 'Haute' | 'Normale';
 
+export interface ProspectReseauxSociaux {
+  instagram?: string;
+  tiktok?: string;
+  facebook?: string;
+  linkedin?: string;
+  autres?: string;
+}
+
 export interface Prospect {
   id: string;
   nom_marque: string;
   pays: string;
   contact_nom: string | null;
   contact_email: string | null;
+  contact_telephone?: string | null;
   lien_boutique: string | null;
+  liens_pubs?: string[];
+  liens_produits?: string[];
+  liens_reseaux?: ProspectReseauxSociaux;
   statut: ProspectStatut;
   valeur_estimee_eur: number;
   drive_folder_id: string | null;

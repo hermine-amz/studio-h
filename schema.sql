@@ -5,7 +5,11 @@ CREATE TABLE IF NOT EXISTS prospects (
   pays TEXT DEFAULT 'France',
   contact_nom TEXT,
   contact_email TEXT,
+  contact_telephone TEXT,
   lien_boutique TEXT,
+  liens_pubs JSONB DEFAULT '[]'::jsonb,
+  liens_produits JSONB DEFAULT '[]'::jsonb,
+  liens_reseaux JSONB DEFAULT '{}'::jsonb,
   statut TEXT DEFAULT 'À contacter', -- À contacter, Contacté, Démo envoyée, Négociation, Signé, Perdu
   valeur_estimee_eur NUMERIC(10,2) DEFAULT 0,
   drive_folder_id TEXT,
@@ -13,6 +17,11 @@ CREATE TABLE IF NOT EXISTS prospects (
   date_dernier_contact TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS contact_telephone TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS liens_pubs JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS liens_produits JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS liens_reseaux JSONB DEFAULT '{}'::jsonb;
 
 -- 2. Table Commandes UGC
 CREATE TABLE IF NOT EXISTS commandes_ugc (

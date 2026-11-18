@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { ToastProvider } from '@/context/ToastContext';
+import { ConfirmProvider } from '@/context/ConfirmContext';
 import { StudioDataProvider } from '@/context/StudioDataContext';
 import { AppShell } from '@/components/layout/AppShell';
 
@@ -33,9 +34,11 @@ export default function RootLayout({
     <html lang="fr" className={inter.variable}>
       <body className="font-sans bg-[#F8F9FA] text-zinc-900 antialiased overflow-x-hidden w-full max-w-full">
         <ToastProvider>
-          <StudioDataProvider>
-            <AppShell>{children}</AppShell>
-          </StudioDataProvider>
+          <ConfirmProvider>
+            <StudioDataProvider>
+              <AppShell>{children}</AppShell>
+            </StudioDataProvider>
+          </ConfirmProvider>
         </ToastProvider>
       </body>
     </html>

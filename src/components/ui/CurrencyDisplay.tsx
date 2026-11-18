@@ -22,17 +22,17 @@ export function CurrencyDisplay({
   const fcfaFormatted = formatFcfa(amountEur);
 
   const eurClasses = {
-    sm: 'text-xs font-semibold',
-    md: 'text-sm font-semibold',
-    lg: 'text-lg font-bold tracking-tight',
-    xl: 'text-xl font-bold tracking-tight',
+    sm: 'text-[13px] font-semibold',
+    md: 'text-[15px] font-semibold',
+    lg: 'text-xl font-bold tracking-tight',
+    xl: 'text-2xl font-bold tracking-tight',
   }[size];
 
   const fcfaClasses = {
-    sm: 'text-[10px]',
-    md: 'text-[11px]',
-    lg: 'text-[11px]',
-    xl: 'text-xs',
+    sm: 'text-[11px]',
+    md: 'text-xs',
+    lg: 'text-xs',
+    xl: 'text-[13px]',
   }[size];
 
   if (layout === 'inline') {
