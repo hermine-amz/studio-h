@@ -10,6 +10,13 @@ Configurer dans l'environnement de déploiement (et localement dans un fichier n
 
 Aucune valeur de secours n'est utilisée dans le code client. Ne jamais exposer une clé `service_role` dans une variable `NEXT_PUBLIC_*` ni dans le navigateur.
 
+## Ordre d'installation SQL
+
+1. `schema.sql` crée les tables et active RLS en mode fermé : aucun accès applicatif n'est accordé à `anon` ou `authenticated` à ce stade.
+2. Le fichier `supabase/migrations/20261118000000_studio_h_admin_rls.sql` accorde ensuite le CRUD au rôle `authenticated`, limité par une politique email administrateur.
+
+Ne pas relancer `schema.sql` après la migration RLS sans réappliquer ensuite la migration : le script de schéma révoque volontairement les droits applicatifs pour rester fermé par défaut.
+
 ## Migration RLS
 
 Le fichier `supabase/migrations/20261118000000_studio_h_admin_rls.sql` est un modèle à relire. Remplacer chaque occurrence de `__STUDIO_H_ADMIN_EMAIL__` par l'adresse exacte du compte admin avant exécution. Le modèle refuse volontairement de s'exécuter tant que le marqueur n'a pas été remplacé.
