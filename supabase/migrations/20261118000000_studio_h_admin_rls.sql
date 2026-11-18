@@ -7,8 +7,8 @@ begin;
 
 do $$
 begin
-  if '__STUDIO_H_ADMIN_EMAIL__' = 'REPLACE_WITH_ADMIN_EMAIL' then
-    raise exception 'Replace __STUDIO_H_ADMIN_EMAIL__ before applying this migration';
+  if position('@' in '__STUDIO_H_ADMIN_EMAIL__') = 0 then
+    raise exception 'Replace __STUDIO_H_ADMIN_EMAIL__ with a valid administrator email before applying this migration';
   end if;
 end
 $$;
@@ -40,7 +40,7 @@ to authenticated;
 
 create policy "studio_h_admin_only" on public.prospects
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
   with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
 
 create policy "studio_h_admin_only" on public.commandes_ugc
