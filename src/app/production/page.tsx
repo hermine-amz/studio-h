@@ -37,6 +37,7 @@ import type {
   MediaCreation,
   ModeDecoupagePrompt,
   CommandePromptScene,
+  TypeCommandeUgc,
 } from '@/types/database';
 import {
   formatEur,
@@ -44,6 +45,8 @@ import {
   getVideoPreviewUrl,
   getImagePreviewUrl,
 } from '@/lib/currency';
+import { CountryBadge } from '@/components/ui/CountryFlag';
+import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -89,6 +92,9 @@ function ProductionWorkshopContent() {
   const [statusFilter, setStatusFilter] = useState<StatutProduction | 'ALL'>(
     'ALL'
   );
+  const [typeFilter, setTypeFilter] = useState<TypeCommandeUgc | 'ALL'>('ALL');
+  const [ordersPage, setOrdersPage] = useState<number>(1);
+  const [ordersPageSize, setOrdersPageSize] = useState<number>(10);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
     initialOrderParam
   );
@@ -131,6 +137,8 @@ function ProductionWorkshopContent() {
 
   // New Order Modal Form
   const [prospectId, setProspectId] = useState(prospects[0]?.id || '');
+  const [typeCommande, setTypeCommande] =
+    useState<TypeCommandeUgc>('commande_client');
   const [nomPack, setNomPack] = useState('');
   const [briefProduit, setBriefProduit] = useState('');
   const [montantEur, setMontantEur] = useState('1450');
@@ -141,10 +149,30 @@ function ProductionWorkshopContent() {
   const [newOrderPhotos, setNewOrderPhotos] = useState<string[]>([]);
 
   const filteredOrders = useMemo(() => {
-    return commandes.filter(
-      (c) => statusFilter === 'ALL' || c.statut_production === statusFilter
-    );
-  }, [commandes, statusFilter]);
+    return commandes.filter((c) => {
+      const matchStatus =
+        statusFilter === 'ALL' || c.statut_production === statusFilter;
+      const orderType = c.type_commande || 'commande_client';
+      const matchType = typeFilter === 'ALL' || orderType === typeFilter;
+      return matchStatus && matchType;
+    });
+  }, [commandes, statusFilter, typeFilter]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (ordersPage - 1) * ordersPageSize;
+    return filteredOrders.slice(start, start + ordersPageSize);
+  }, [filteredOrders, ordersPage, ordersPageSize]);
+
+  const realOrdersCount = useMemo(
+    () =>
+      commandes.filter((c) => (c.type_commande || 'commande_client') === 'commande_client')
+        .length,
+    [commandes]
+  );
+  const freeTrialsCount = useMemo(
+    () => commandes.filter((c) => c.type_commande === 'essai_gratuit').length,
+    [commandes]
+  );
 
   const activeOrder = useMemo(() => {
     if (selectedOrderId) {
@@ -590,17 +618,19 @@ function ProductionWorkshopContent() {
     const finalLinks = newOrderLinkInput.trim()
       ? [...newOrderLinks, newOrderLinkInput.trim()]
       : newOrderLinks;
+    const isTrial = typeCommande === 'essai_gratuit';
 
     const created = await addCommande({
       prospect_id: prospectId,
+      type_commande: typeCommande,
       nom_pack: nomPack.trim(),
       brief_produit: briefProduit.trim() || null,
       liens_reference: finalLinks,
       photos_reference: newOrderPhotos,
       prompts_scenes: [],
       statut_production: 'Brief reçu',
-      montant_eur: Number(montantEur) || 0,
-      statut_paiement: 'En attente',
+      montant_eur: isTrial ? 0 : Number(montantEur) || 0,
+      statut_paiement: isTrial ? 'Essai gratuit' : 'En attente',
       nombre_creations: Number(nombreCreations) || 1,
       drive_subfolder_id: null,
       lien_livraison_public: null,
@@ -616,7 +646,9 @@ function ProductionWorkshopContent() {
     setIsNewOrderOpen(false);
 
     toast({
-      title: 'Nouvelle commande ouverte dans l’atelier',
+      title: isTrial
+        ? 'Essai gratuit (Démo Prospect) ouvert dans l’atelier'
+        : 'Nouvelle commande client ouverte dans l’atelier',
       description: `Le pack "${created.nom_pack}" est prêt pour la production.`,
     });
   };
@@ -671,40 +703,96 @@ function ProductionWorkshopContent() {
         </button>
       </div>
 
-      {/* Status Filter Bar */}
-      <div className="glass-card p-3 flex items-center gap-2 overflow-x-auto">
-        <SlidersHorizontal
-          className="h-4 w-4 text-zinc-500 ml-2 mr-1 shrink-0"
-          strokeWidth={1.5}
-        />
-        <button
-          onClick={() => setStatusFilter('ALL')}
-          className={`rounded-xl px-3.5 py-2 text-xs font-medium transition-all shrink-0 border ${
-            statusFilter === 'ALL'
-              ? 'bg-[#568203] text-white border-[#568203]'
-              : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
-          }`}
-        >
-          Toutes ({commandes.length})
-        </button>
-        {PRODUCTION_STATUSES.map((st) => {
-          const count = commandes.filter(
-            (c) => c.statut_production === st
-          ).length;
-          return (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-medium transition-all shrink-0 border ${
-                statusFilter === st
-                  ? 'bg-[#568203] text-white border-[#568203]'
-                  : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
-              }`}
-            >
-              {st} ({count})
-            </button>
-          );
-        })}
+      {/* Filter Bar: Order Nature (Commandes Clients Réelles vs Essais Gratuits Prospects) + Production Status */}
+      <div className="glass-card p-3.5 space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2 pb-2.5 border-b border-stone-200/80">
+          <span className="text-xs font-semibold text-zinc-600 mr-1">
+            Nature :
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setTypeFilter('ALL');
+              setOrdersPage(1);
+            }}
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+              typeFilter === 'ALL'
+                ? 'bg-[#568203] text-white border-[#568203]'
+                : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            Tout ({commandes.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTypeFilter('commande_client');
+              setOrdersPage(1);
+            }}
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+              typeFilter === 'commande_client'
+                ? 'bg-[#568203] text-white border-[#568203]'
+                : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            Commandes Clients Réelles ({realOrdersCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTypeFilter('essai_gratuit');
+              setOrdersPage(1);
+            }}
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+              typeFilter === 'essai_gratuit'
+                ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203] font-semibold'
+                : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+            }`}
+          >
+            Essais Gratuits / Démos Prospects ({freeTrialsCount})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <SlidersHorizontal
+            className="h-4 w-4 text-zinc-500 ml-1 mr-1 shrink-0"
+            strokeWidth={1.5}
+          />
+          <button
+            onClick={() => {
+              setStatusFilter('ALL');
+              setOrdersPage(1);
+            }}
+            className={`rounded-xl px-3.5 py-1.5 text-xs font-medium transition-all shrink-0 border ${
+              statusFilter === 'ALL'
+                ? 'bg-[#568203] text-white border-[#568203]'
+                : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
+            }`}
+          >
+            Tous statuts ({commandes.length})
+          </button>
+          {PRODUCTION_STATUSES.map((st) => {
+            const count = commandes.filter(
+              (c) => c.statut_production === st
+            ).length;
+            return (
+              <button
+                key={st}
+                onClick={() => {
+                  setStatusFilter(st);
+                  setOrdersPage(1);
+                }}
+                className={`rounded-xl px-3.5 py-1.5 text-xs font-medium transition-all shrink-0 border ${
+                  statusFilter === st
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100'
+                }`}
+              >
+                {st} ({count})
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Master-Detail Layout */}
@@ -716,76 +804,111 @@ function ProductionWorkshopContent() {
               Aucune commande dans ce statut de production.
             </div>
           ) : (
-            filteredOrders.map((ord) => {
-              const client = prospects.find((p) => p.id === ord.prospect_id);
-              const isSelected = activeOrder?.id === ord.id;
-              const ordMediasCount = medias.filter(
-                (m) => m.commande_id === ord.id
-              ).length;
-              const ordScenesCount = ord.prompts_scenes?.length || 0;
+            <>
+              {paginatedOrders.map((ord) => {
+                const client = prospects.find((p) => p.id === ord.prospect_id);
+                const isSelected = activeOrder?.id === ord.id;
+                const ordMediasCount = medias.filter(
+                  (m) => m.commande_id === ord.id
+                ).length;
+                const ordScenesCount = ord.prompts_scenes?.length || 0;
+                const isTrial = ord.type_commande === 'essai_gratuit';
 
-              return (
-                <button
-                  key={ord.id}
-                  onClick={() => setSelectedOrderId(ord.id)}
-                  className={`w-full text-left rounded-2xl p-4 border transition-all space-y-2.5 ${
-                    isSelected
-                      ? 'bg-[#FFF8B9]/40 border-[#568203] shadow-sm'
-                      : 'bg-white hover:bg-stone-50 border-stone-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {client?.logo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={client.logo_url}
-                          alt={client.nom_marque}
-                          className="h-7 w-7 rounded-lg object-cover border border-stone-200 shrink-0"
-                        />
-                      ) : (
-                        <div className="h-7 w-7 rounded-lg bg-[#FFF8B9]/70 border border-[#568203]/25 flex items-center justify-center text-xs font-bold text-[#568203] shrink-0">
-                          {(client?.nom_marque || 'C').charAt(0).toUpperCase()}
+                return (
+                  <button
+                    key={ord.id}
+                    onClick={() => setSelectedOrderId(ord.id)}
+                    className={`w-full text-left rounded-2xl p-4 border transition-all space-y-2.5 ${
+                      isSelected
+                        ? 'glass-card-avocado'
+                        : 'glass-card hover:bg-stone-50/90'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {client?.logo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={client.logo_url}
+                            alt={client.nom_marque}
+                            className="h-7 w-7 rounded-lg object-cover border border-stone-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="h-7 w-7 rounded-lg bg-[#FFF8B9]/70 border border-[#568203]/25 flex items-center justify-center text-xs font-bold text-[#568203] shrink-0">
+                            {(client?.nom_marque || 'C').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 truncate">
+                              {client?.nom_marque || 'Client Studio H'}
+                            </span>
+                            {client?.pays && (
+                              <CountryBadge code={client.pays} />
+                            )}
+                          </div>
+                          <h3 className="text-sm font-semibold text-zinc-900 leading-snug truncate">
+                            {ord.nom_pack}
+                          </h3>
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <span className="block text-[11px] font-mono uppercase tracking-wider text-zinc-500 truncate">
-                          {client?.nom_marque || 'Client Studio H'}
+                      </div>
+
+                      <span className="shrink-0 rounded-lg bg-[#568203] px-2.5 py-0.5 text-[11px] font-medium text-white">
+                        {ord.statut_production}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-semibold border ${
+                          isTrial
+                            ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203]/35'
+                            : 'bg-[#568203]/10 text-[#568203] border-[#568203]/25'
+                        }`}
+                      >
+                        {isTrial
+                          ? 'Essai Gratuit / Démo Prospect (0 €)'
+                          : 'Commande Client Réelle'}
+                      </span>
+                    </div>
+
+                    {ord.brief_produit && (
+                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                        {ord.brief_produit}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs text-zinc-600 pt-2 border-t border-stone-200/70">
+                      <div>
+                        <span className="font-semibold text-zinc-900">
+                          {isTrial ? '0 € (Essai)' : formatEur(ord.montant_eur)}
                         </span>
-                        <h3 className="text-sm font-semibold text-zinc-900 leading-snug truncate">
-                          {ord.nom_pack}
-                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[11px]">
+                        <span>{ordScenesCount} prompt(s)</span>
+                        <span>•</span>
+                        <span>
+                          {ordMediasCount}/{ord.nombre_creations} médias
+                        </span>
                       </div>
                     </div>
+                  </button>
+                );
+              })}
 
-                    <span className="shrink-0 rounded-lg bg-[#568203] px-2.5 py-0.5 text-[11px] font-medium text-white">
-                      {ord.statut_production}
-                    </span>
-                  </div>
-
-                  {ord.brief_produit && (
-                    <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
-                      {ord.brief_produit}
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between text-xs text-zinc-600 pt-2 border-t border-stone-200/70">
-                    <div>
-                      <span className="font-semibold text-zinc-900">
-                        {formatEur(ord.montant_eur)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 font-mono text-[11px]">
-                      <span>{ordScenesCount} prompt(s)</span>
-                      <span>•</span>
-                      <span>
-                        {ordMediasCount}/{ord.nombre_creations} médias
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })
+              {filteredOrders.length > ordersPageSize && (
+                <div className="glass-card p-3">
+                  <DataTablePagination
+                    totalItems={filteredOrders.length}
+                    currentPage={ordersPage}
+                    pageSize={ordersPageSize}
+                    onPageChange={setOrdersPage}
+                    onPageSizeChange={setOrdersPageSize}
+                    itemLabel="commandes"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -801,6 +924,17 @@ function ProductionWorkshopContent() {
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-4 border-b border-stone-200/85">
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold border ${
+                        activeOrder.type_commande === 'essai_gratuit'
+                          ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203]'
+                          : 'bg-[#568203] text-white border-[#568203]'
+                      }`}
+                    >
+                      {activeOrder.type_commande === 'essai_gratuit'
+                        ? 'Essai Gratuit / Démo Prospect (0 €)'
+                        : 'Commande Client Réelle'}
+                    </span>
                     {activeClient && (
                       <Link
                         href={`/crm/${activeClient.id}`}
@@ -814,7 +948,8 @@ function ProductionWorkshopContent() {
                             className="h-4 w-4 rounded object-cover"
                           />
                         )}
-                        <span>Client : {activeClient.nom_marque}</span>
+                        <span>{activeClient.nom_marque}</span>
+                        <CountryBadge code={activeClient.pays} />
                       </Link>
                     )}
                     {activeOrder.date_limite && (
@@ -1717,9 +1852,63 @@ function ProductionWorkshopContent() {
             </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-4">
+              {/* Nature : Commande Client Réelle vs Essai Gratuit Prospect */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  Nature de la production *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypeCommande('commande_client');
+                      if (montantEur === '0') setMontantEur('1450');
+                    }}
+                    className={`rounded-xl p-3 text-left border transition-all ${
+                      typeCommande === 'commande_client'
+                        ? 'bg-[#568203] text-white border-[#568203] shadow-sm'
+                        : 'bg-stone-50 text-zinc-700 border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">
+                      Commande Client Réelle
+                    </div>
+                    <div
+                      className={`text-[11px] mt-0.5 ${
+                        typeCommande === 'commande_client'
+                          ? 'text-white/85'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      Prestation facturée au client signé
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypeCommande('essai_gratuit');
+                      setMontantEur('0');
+                    }}
+                    className={`rounded-xl p-3 text-left border transition-all ${
+                      typeCommande === 'essai_gratuit'
+                        ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203] shadow-sm'
+                        : 'bg-stone-50 text-zinc-700 border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">
+                      Essai Gratuit / Démo Prospect
+                    </div>
+                    <div className="text-[11px] text-zinc-600 mt-0.5">
+                      Échantillon gratuit livré à un prospect (0 €)
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                  Client rattaché *
+                  Prospect ou Client rattaché *
                 </label>
                 <select
                   required

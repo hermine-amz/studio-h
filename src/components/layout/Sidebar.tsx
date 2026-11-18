@@ -79,7 +79,14 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-60 flex-col bg-white/95 backdrop-blur-md border-r border-stone-200/90">
+    <aside
+      style={{
+        background: 'rgba(255, 255, 255, 0.88)',
+        backdropFilter: 'blur(18px)',
+        boxShadow: '6px 0 28px -6px rgba(15, 23, 42, 0.08)',
+      }}
+      className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-60 flex-col border-r border-stone-200/90"
+    >
       {/* Brand Header */}
       <div className="px-5 py-4.5 border-b border-stone-100">
         <Link href="/" className="block focus:outline-none">

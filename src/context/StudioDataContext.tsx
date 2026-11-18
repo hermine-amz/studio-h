@@ -98,6 +98,7 @@ function deserializeProspect(raw: Prospect): Prospect {
 function serializeCommandeBrief(cmd: Partial<CommandeUgc>): string {
   const baseBrief = (cmd.brief_produit || '').split(META_MARKER)[0].trim();
   const meta = {
+    type_commande: cmd.type_commande || 'commande_client',
     liens_reference: cmd.liens_reference || [],
     photos_reference: cmd.photos_reference || [],
     prompts_scenes: cmd.prompts_scenes || [],
@@ -113,6 +114,11 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
   if (idx === -1) {
     return {
       ...raw,
+      type_commande:
+        raw.type_commande ||
+        (Number(raw.montant_eur) === 0 && raw.statut_paiement !== 'Payé'
+          ? 'commande_client'
+          : 'commande_client'),
       drive_subfolder_id: validSubfolder,
       liens_reference: raw.liens_reference || [],
       photos_reference: raw.photos_reference || [],
@@ -128,6 +134,7 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
     const meta = JSON.parse(jsonPart);
     return {
       ...raw,
+      type_commande: raw.type_commande || meta.type_commande || 'commande_client',
       drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
       liens_reference: raw.liens_reference?.length
@@ -143,6 +150,7 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
   } catch {
     return {
       ...raw,
+      type_commande: raw.type_commande || 'commande_client',
       drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
       prompts_scenes: raw.prompts_scenes || [],

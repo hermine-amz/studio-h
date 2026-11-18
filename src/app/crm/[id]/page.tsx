@@ -36,10 +36,12 @@ import { useConfirm } from '@/context/ConfirmContext';
 import {
   formatEur,
   formatFcfa,
-  normalizeCountryCode,
   getVideoPreviewUrl,
   getImagePreviewUrl,
 } from '@/lib/currency';
+import { resolveIso2Code } from '@/lib/countries';
+import { CountryBadge, CountrySelect } from '@/components/ui/CountryFlag';
+import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -47,6 +49,7 @@ import type {
   StatutProduction,
   StatutPaiement,
   ProspectStatut,
+  TypeCommandeUgc,
 } from '@/types/database';
 
 function Client360Content() {
@@ -101,13 +104,21 @@ function Client360Content() {
     return medias.filter((m) => orderIds.has(m.commande_id));
   }, [medias, clientOrders]);
 
-  // 4 Top KPIs
-  const totalRevenueEur = useMemo(
-    () =>
-      clientOrders.reduce((acc, c) => acc + Number(c.montant_eur || 0), 0),
+  // 4 Top KPIs (separate real paid client orders from free prospect trials)
+  const realClientOrders = useMemo(
+    () => clientOrders.filter((c) => c.type_commande !== 'essai_gratuit'),
     [clientOrders]
   );
-  const totalOrdersCount = clientOrders.length;
+  const freeTrialOrdersCount = useMemo(
+    () => clientOrders.filter((c) => c.type_commande === 'essai_gratuit').length,
+    [clientOrders]
+  );
+  const totalRevenueEur = useMemo(
+    () =>
+      realClientOrders.reduce((acc, c) => acc + Number(c.montant_eur || 0), 0),
+    [realClientOrders]
+  );
+  const totalOrdersCount = realClientOrders.length;
   const totalCreationsDelivered = useMemo(
     () =>
       clientOrders.reduce(
@@ -120,6 +131,14 @@ function Client360Content() {
     () => (totalOrdersCount > 0 ? totalRevenueEur / totalOrdersCount : 0),
     [totalRevenueEur, totalOrdersCount]
   );
+
+  // Orders Data Table Pagination
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersPageSize, setOrdersPageSize] = useState(10);
+  const paginatedClientOrders = useMemo(() => {
+    const start = (ordersPage - 1) * ordersPageSize;
+    return clientOrders.slice(start, start + ordersPageSize);
+  }, [clientOrders, ordersPage, ordersPageSize]);
 
   // Editable Contact, Logo & Socials state
   const [nomMarque, setNomMarque] = useState('');
@@ -194,6 +213,8 @@ function Client360Content() {
 
   // New Order Modal State
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [typeCommande, setTypeCommande] =
+    useState<TypeCommandeUgc>('commande_client');
   const [nomPack, setNomPack] = useState('');
   const [briefProduit, setBriefProduit] = useState('');
   const [montantEur, setMontantEur] = useState('1450');
@@ -221,7 +242,7 @@ function Client360Content() {
 
     await updateProspect(client.id, {
       nom_marque: nomMarque.trim() || client.nom_marque,
-      pays,
+      pays: resolveIso2Code(pays),
       logo_url: logoUrl.trim() || null,
       statut,
       valeur_estimee_eur: Number(valeurEstimee) || 0,
@@ -365,13 +386,15 @@ function Client360Content() {
     e.preventDefault();
     if (!client || !nomPack.trim()) return;
 
+    const isTrial = typeCommande === 'essai_gratuit';
     await addCommande({
       prospect_id: client.id,
+      type_commande: typeCommande,
       nom_pack: nomPack.trim(),
       brief_produit: briefProduit.trim() || null,
       statut_production: statutProduction,
-      montant_eur: Number(montantEur) || 0,
-      statut_paiement: statutPaiement,
+      montant_eur: isTrial ? 0 : Number(montantEur) || 0,
+      statut_paiement: isTrial ? 'Essai gratuit' : statutPaiement,
       nombre_creations: Number(nombreCreations) || 1,
       drive_subfolder_id: null,
       lien_livraison_public: null,
@@ -379,7 +402,9 @@ function Client360Content() {
     });
 
     toast({
-      title: 'Commande UGC créée',
+      title: isTrial
+        ? 'Essai gratuit / Démo créé'
+        : 'Commande Client UGC créée',
       description: `Le pack "${nomPack}" a été rattaché à ${client.nom_marque}.`,
     });
 
@@ -444,9 +469,7 @@ function Client360Content() {
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
               {client.nom_marque}
             </h1>
-            <span className="rounded-lg bg-[#568203] px-2.5 py-0.5 text-xs font-mono font-semibold uppercase text-white">
-              {normalizeCountryCode(client.pays)}
-            </span>
+            <CountryBadge code={client.pays} showName />
             <span className="rounded-lg bg-[#FFF8B9]/80 border border-[#568203]/25 px-2.5 py-0.5 text-xs font-medium text-zinc-900">
               {client.statut}
             </span>
@@ -754,14 +777,9 @@ function Client360Content() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-700 mb-1">
-                    Pays
+                    Pays (Drapeau)
                   </label>
-                  <input
-                    type="text"
-                    value={pays}
-                    onChange={(e) => setPays(e.target.value)}
-                    className="glass-input"
-                  />
+                  <CountrySelect value={pays} onChange={setPays} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-700 mb-1">
@@ -1174,14 +1192,14 @@ function Client360Content() {
 
             <div className="glass-card p-4 space-y-1.5">
               <div className="flex items-center justify-between text-xs text-zinc-600">
-                <span>Nombre Total de Commandes</span>
+                <span>Commandes Réelles / Essais</span>
                 <Package className="h-4 w-4 text-zinc-700" strokeWidth={1.5} />
               </div>
               <div className="text-xl font-bold text-zinc-900">
-                {totalOrdersCount}
+                {totalOrdersCount} commande{totalOrdersCount > 1 ? 's' : ''}
               </div>
               <div className="text-xs text-zinc-500">
-                Packs UGC commandés par {client.nom_marque}
+                + {freeTrialOrdersCount} essai{freeTrialOrdersCount > 1 ? 's' : ''} gratuit{freeTrialOrdersCount > 1 ? 's' : ''} (démo)
               </div>
             </div>
 
@@ -1398,76 +1416,105 @@ function Client360Content() {
                 Aucune commande enregistrée pour ce client pour le moment.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-stone-200/85 text-[11px] uppercase tracking-wider text-zinc-500">
-                      <th className="py-3 px-3.5">Pack Commandé</th>
-                      <th className="py-3 px-3.5">Statut Production</th>
-                      <th className="py-3 px-3.5">Paiement</th>
-                      <th className="py-3 px-3.5">Créations</th>
-                      <th className="py-3 px-3.5">Montant (€ / FCFA)</th>
-                      <th className="py-3 px-3.5">Date Limite</th>
-                      <th className="py-3 px-3.5 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-200/70 text-[13px]">
-                    {clientOrders.map((ord) => (
-                      <tr
-                        key={ord.id}
-                        className="hover:bg-stone-50/80 transition-colors"
-                      >
-                        <td className="py-3 px-3.5 font-medium text-zinc-900">
-                          <div>{ord.nom_pack}</div>
-                          {ord.brief_produit && (
-                            <div className="text-xs text-zinc-500 line-clamp-1 max-w-md">
-                              {ord.brief_produit}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3.5">
-                          <span className="rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-800">
-                            {ord.statut_production}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3.5">
-                          <span
-                            className={`rounded-lg px-2.5 py-1 text-xs border ${
-                              ord.statut_paiement === 'Payé'
-                                ? 'bg-[#568203] text-white border-[#568203]'
-                                : 'bg-stone-100 text-zinc-700 border-stone-200'
-                            }`}
-                          >
-                            {ord.statut_paiement}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3.5 font-mono text-xs text-zinc-900">
-                          {ord.nombre_creations}
-                        </td>
-                        <td className="py-3 px-3.5">
-                          <div className="font-semibold text-zinc-900">
-                            {formatEur(ord.montant_eur)}
-                          </div>
-                          <div className="text-xs font-mono text-zinc-500">
-                            {formatFcfa(ord.montant_eur)}
-                          </div>
-                        </td>
-                        <td className="py-3 px-3.5 text-xs font-mono text-zinc-700">
-                          {ord.date_limite || '—'}
-                        </td>
-                        <td className="py-3 px-3.5 text-right">
-                          <Link
-                            href={`/production?commande=${ord.id}`}
-                            className="btn-secondary py-1.5 px-3 text-xs"
-                          >
-                            <span>Atelier</span>
-                          </Link>
-                        </td>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-stone-200/85 text-[11px] uppercase tracking-wider text-zinc-500">
+                        <th className="py-3 px-3.5">Pack & Type</th>
+                        <th className="py-3 px-3.5">Statut Production</th>
+                        <th className="py-3 px-3.5">Paiement</th>
+                        <th className="py-3 px-3.5">Créations</th>
+                        <th className="py-3 px-3.5">Montant (€ / FCFA)</th>
+                        <th className="py-3 px-3.5">Date Limite</th>
+                        <th className="py-3 px-3.5 text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200/70 text-[13px]">
+                      {paginatedClientOrders.map((ord) => {
+                        const isTrial = ord.type_commande === 'essai_gratuit';
+                        return (
+                          <tr
+                            key={ord.id}
+                            className="hover:bg-stone-50/80 transition-colors"
+                          >
+                            <td className="py-3 px-3.5 font-medium text-zinc-900">
+                              <div className="flex items-center gap-2">
+                                <span>{ord.nom_pack}</span>
+                                <span
+                                  className={`rounded-md px-2 py-0.5 text-[10px] font-semibold border ${
+                                    isTrial
+                                      ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203]/35'
+                                      : 'bg-[#568203]/10 text-[#568203] border-[#568203]/25'
+                                  }`}
+                                >
+                                  {isTrial
+                                    ? 'Essai Gratuit (Prospect)'
+                                    : 'Commande Réelle'}
+                                </span>
+                              </div>
+                              {ord.brief_produit && (
+                                <div className="text-xs text-zinc-500 line-clamp-1 max-w-md mt-0.5">
+                                  {ord.brief_produit}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <span className="rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-800">
+                                {ord.statut_production}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <span
+                                className={`rounded-lg px-2.5 py-1 text-xs border ${
+                                  isTrial
+                                    ? 'bg-[#FFF8B9]/80 text-zinc-900 border-[#568203]/30'
+                                    : ord.statut_paiement === 'Payé'
+                                      ? 'bg-[#568203] text-white border-[#568203]'
+                                      : 'bg-stone-100 text-zinc-700 border-stone-200'
+                                }`}
+                              >
+                                {isTrial ? 'Essai gratuit (0 €)' : ord.statut_paiement}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3.5 font-mono text-xs text-zinc-900">
+                              {ord.nombre_creations}
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <div className="font-semibold text-zinc-900">
+                                {formatEur(ord.montant_eur)}
+                              </div>
+                              <div className="text-xs font-mono text-zinc-500">
+                                {formatFcfa(ord.montant_eur)}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3.5 text-xs font-mono text-zinc-700">
+                              {ord.date_limite || '—'}
+                            </td>
+                            <td className="py-3 px-3.5 text-right">
+                              <Link
+                                href={`/production?commande=${ord.id}`}
+                                className="btn-secondary py-1.5 px-3 text-xs"
+                              >
+                                <span>Atelier</span>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <DataTablePagination
+                  totalItems={clientOrders.length}
+                  currentPage={ordersPage}
+                  pageSize={ordersPageSize}
+                  onPageChange={setOrdersPage}
+                  onPageSizeChange={setOrdersPageSize}
+                  itemLabel="commandes & essais"
+                />
+              </>
             )}
           </section>
 
@@ -1563,6 +1610,62 @@ function Client360Content() {
             </h3>
 
             <form onSubmit={handleAddOrder} className="space-y-4">
+              {/* Type de commande : Commande Client Réelle vs Essai Gratuit Prospect */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
+                  Nature de la production *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypeCommande('commande_client');
+                      if (montantEur === '0') setMontantEur('1450');
+                      setStatutPaiement('En attente');
+                    }}
+                    className={`rounded-xl p-3 text-left border transition-all ${
+                      typeCommande === 'commande_client'
+                        ? 'bg-[#568203] text-white border-[#568203] shadow-sm'
+                        : 'bg-stone-50 text-zinc-700 border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">
+                      Commande Client Réelle
+                    </div>
+                    <div
+                      className={`text-[11px] mt-0.5 ${
+                        typeCommande === 'commande_client'
+                          ? 'text-white/85'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      Prestation facturée au client
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypeCommande('essai_gratuit');
+                      setMontantEur('0');
+                      setStatutPaiement('Essai gratuit');
+                    }}
+                    className={`rounded-xl p-3 text-left border transition-all ${
+                      typeCommande === 'essai_gratuit'
+                        ? 'bg-[#FFF8B9] text-zinc-900 border-[#568203] shadow-sm'
+                        : 'bg-stone-50 text-zinc-700 border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">
+                      Essai Gratuit / Démo Prospect
+                    </div>
+                    <div className="text-[11px] text-zinc-600 mt-0.5">
+                      Échantillon livré gratuitement (0 €)
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Titre / Nom du Pack *

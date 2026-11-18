@@ -13,7 +13,9 @@ export type StatutProduction =
   | 'Montage'
   | 'Livré';
 
-export type StatutPaiement = 'En attente' | 'Payé';
+export type StatutPaiement = 'En attente' | 'Payé' | 'Essai gratuit';
+
+export type TypeCommandeUgc = 'commande_client' | 'essai_gratuit';
 
 export type TypeMedia = 'video' | 'image';
 
@@ -84,6 +86,7 @@ export interface Prospect {
 export interface CommandeUgc {
   id: string;
   prospect_id: string;
+  type_commande?: TypeCommandeUgc;
   nom_pack: string;
   brief_produit: string | null;
   liens_reference?: string[];

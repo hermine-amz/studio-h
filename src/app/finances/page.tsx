@@ -20,6 +20,7 @@ import { useConfirm } from '@/context/ConfirmContext';
 import type { TypeFinance, CategorieDepense } from '@/types/database';
 import { formatEur, formatFcfa } from '@/lib/currency';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
+import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 type PeriodFilter =
@@ -96,6 +97,15 @@ export default function FinancesPage() {
     CategorieDepense | 'ALL'
   >('ALL');
 
+  // Data Table Pagination & Search for Revenues and Expenses
+  const [revSearch, setRevSearch] = useState('');
+  const [revPage, setRevPage] = useState(1);
+  const [revPageSize, setRevPageSize] = useState(10);
+
+  const [depSearch, setDepSearch] = useState('');
+  const [depPage, setDepPage] = useState(1);
+  const [depPageSize, setDepPageSize] = useState(10);
+
   // Quick Form State
   const [type, setType] = useState<TypeFinance>('Dépense');
   const [categorieDepense, setCategorieDepense] =
@@ -152,6 +162,7 @@ export default function FinancesPage() {
 
   const paidOrdersNotInFinances = useMemo(() => {
     return commandes.filter((c) => {
+      if (c.type_commande === 'essai_gratuit') return false;
       if (c.statut_paiement !== 'Payé') return false;
       const alreadyLogged = manualRevenus.some((r) =>
         r.libelle.toLowerCase().includes(c.nom_pack.toLowerCase())
@@ -208,11 +219,33 @@ export default function FinancesPage() {
     () =>
       depensesAllPeriod.filter(
         (d) =>
-          expenseCategoryFilter === 'ALL' ||
-          d.parsedCategory === expenseCategoryFilter
+          (expenseCategoryFilter === 'ALL' ||
+            d.parsedCategory === expenseCategoryFilter) &&
+          (!depSearch.trim() ||
+            d.cleanLabel.toLowerCase().includes(depSearch.toLowerCase()))
       ),
-    [depensesAllPeriod, expenseCategoryFilter]
+    [depensesAllPeriod, expenseCategoryFilter, depSearch]
   );
+
+  const filteredRevenus = useMemo(
+    () =>
+      combinedRevenus.filter(
+        (r) =>
+          !revSearch.trim() ||
+          r.libelle.toLowerCase().includes(revSearch.toLowerCase())
+      ),
+    [combinedRevenus, revSearch]
+  );
+
+  const paginatedRevenus = useMemo(() => {
+    const start = (revPage - 1) * revPageSize;
+    return filteredRevenus.slice(start, start + revPageSize);
+  }, [filteredRevenus, revPage, revPageSize]);
+
+  const paginatedDepenses = useMemo(() => {
+    const start = (depPage - 1) * depPageSize;
+    return depenses.slice(start, start + depPageSize);
+  }, [depenses, depPage, depPageSize]);
 
   const totalRevenusEur = useMemo(
     () =>
@@ -588,61 +621,96 @@ export default function FinancesPage() {
             </span>
           </div>
 
+          <div className="pb-1">
+            <input
+              type="text"
+              value={revSearch}
+              onChange={(e) => {
+                setRevSearch(e.target.value);
+                setRevPage(1);
+              }}
+              placeholder="Filtrer les revenus par libellé ou client..."
+              className="glass-input py-1.5 text-xs"
+            />
+          </div>
+
           <div className="space-y-2">
-            {combinedRevenus.length === 0 ? (
+            {filteredRevenus.length === 0 ? (
               <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
                 Aucun revenu encaissé sur cette période.
               </div>
             ) : (
-              combinedRevenus.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 px-3.5 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-zinc-900 truncate">
-                        {rev.libelle}
-                      </span>
-                      {rev.isSyncedOrder && (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#FFF8B9]/80 border border-[#568203]/25 px-1.5 py-0.5 text-[10px] text-zinc-800">
-                          <CheckCircle2
-                            className="h-3 w-3 text-[#568203]"
-                            strokeWidth={1.5}
-                          />
-                          Sync
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs font-mono text-zinc-500 mt-0.5">
-                      {rev.date_transaction}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <div className="text-right">
-                      <div className="text-[13.5px] font-semibold text-zinc-900">
-                        + {formatEur(rev.montant_eur)}
-                      </div>
-                      <div className="text-[11px] font-mono text-zinc-500">
-                        {formatFcfa(rev.montant_eur)}
-                      </div>
-                    </div>
-
-                    {!rev.isSyncedOrder && (
-                      <button
-                        onClick={() =>
-                          handleDeleteTransaction(rev.id, rev.libelle, 'Revenu')
-                        }
-                        className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
-                        aria-label="Supprimer le revenu"
-                      >
-                        <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                      </button>
-                    )}
-                  </div>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-stone-200 bg-stone-50/90 text-[11px] uppercase tracking-wider text-zinc-500">
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Libellé</th>
+                        <th className="py-2.5 px-3 text-right">Montant (€ / FCFA)</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200/75 text-xs">
+                      {paginatedRevenus.map((rev) => (
+                        <tr key={rev.id} className="hover:bg-[#FFF8B9]/20">
+                          <td className="py-3 px-3 font-mono text-zinc-500 whitespace-nowrap">
+                            {rev.date_transaction}
+                          </td>
+                          <td className="py-3 px-3 font-medium text-zinc-900">
+                            <div className="flex items-center gap-1.5">
+                              <span>{rev.libelle}</span>
+                              {rev.isSyncedOrder && (
+                                <span className="inline-flex items-center gap-1 rounded bg-[#FFF8B9]/80 border border-[#568203]/25 px-1.5 py-0.5 text-[10px] text-zinc-800 shrink-0">
+                                  <CheckCircle2
+                                    className="h-3 w-3 text-[#568203]"
+                                    strokeWidth={1.5}
+                                  />
+                                  Sync
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <div className="font-semibold text-zinc-900">
+                              + {formatEur(rev.montant_eur)}
+                            </div>
+                            <div className="text-[10px] font-mono text-zinc-500">
+                              {formatFcfa(rev.montant_eur)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            {!rev.isSyncedOrder && (
+                              <button
+                                onClick={() =>
+                                  handleDeleteTransaction(
+                                    rev.id,
+                                    rev.libelle,
+                                    'Revenu'
+                                  )
+                                }
+                                className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                                aria-label="Supprimer le revenu"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))
+
+                <DataTablePagination
+                  totalItems={filteredRevenus.length}
+                  currentPage={revPage}
+                  pageSize={revPageSize}
+                  onPageChange={setRevPage}
+                  onPageSizeChange={setRevPageSize}
+                  itemLabel="revenus"
+                />
+              </>
             )}
           </div>
         </section>
@@ -697,58 +765,94 @@ export default function FinancesPage() {
             ))}
           </div>
 
+          <div className="pb-1">
+            <input
+              type="text"
+              value={depSearch}
+              onChange={(e) => {
+                setDepSearch(e.target.value);
+                setDepPage(1);
+              }}
+              placeholder="Filtrer les dépenses par outil ou libellé..."
+              className="glass-input py-1.5 text-xs"
+            />
+          </div>
+
           <div className="space-y-2">
             {depenses.length === 0 ? (
               <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
                 Aucune dépense dans cette catégorie sur la période.
               </div>
             ) : (
-              depenses.map((dep) => (
-                <div
-                  key={dep.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 border border-stone-200 px-3.5 py-3"
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/80 border border-[#568203]/25 px-2 py-0.5 text-[10px] font-medium text-zinc-900">
-                        <Tag className="h-2.5 w-2.5 text-[#568203]" strokeWidth={1.5} />
-                        {dep.parsedCategory}
-                      </span>
-                      <span className="text-[13px] font-medium text-zinc-900 truncate">
-                        {dep.cleanLabel}
-                      </span>
-                    </div>
-                    <div className="text-xs font-mono text-zinc-500">
-                      {dep.date_transaction}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <div className="text-right">
-                      <div className="text-[13.5px] font-semibold text-zinc-900">
-                        - {formatEur(dep.montant_eur)}
-                      </div>
-                      <div className="text-[11px] font-mono text-zinc-500">
-                        {formatFcfa(dep.montant_eur)}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        handleDeleteTransaction(
-                          dep.id,
-                          dep.cleanLabel,
-                          'Dépense'
-                        )
-                      }
-                      className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
-                      aria-label="Supprimer la dépense"
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                    </button>
-                  </div>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-stone-200 bg-stone-50/90 text-[11px] uppercase tracking-wider text-zinc-500">
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Catégorie & Outil</th>
+                        <th className="py-2.5 px-3 text-right">Montant (€ / FCFA)</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200/75 text-xs">
+                      {paginatedDepenses.map((dep) => (
+                        <tr key={dep.id} className="hover:bg-[#FFF8B9]/20">
+                          <td className="py-3 px-3 font-mono text-zinc-500 whitespace-nowrap">
+                            {dep.date_transaction}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/80 border border-[#568203]/25 px-2 py-0.5 text-[10px] font-medium text-zinc-900">
+                                <Tag
+                                  className="h-2.5 w-2.5 text-[#568203]"
+                                  strokeWidth={1.5}
+                                />
+                                {dep.parsedCategory}
+                              </span>
+                              <span className="font-medium text-zinc-900">
+                                {dep.cleanLabel}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <div className="font-semibold text-zinc-900">
+                              - {formatEur(dep.montant_eur)}
+                            </div>
+                            <div className="text-[10px] font-mono text-zinc-500">
+                              {formatFcfa(dep.montant_eur)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() =>
+                                handleDeleteTransaction(
+                                  dep.id,
+                                  dep.cleanLabel,
+                                  'Dépense'
+                                )
+                              }
+                              className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                              aria-label="Supprimer la dépense"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))
+
+                <DataTablePagination
+                  totalItems={depenses.length}
+                  currentPage={depPage}
+                  pageSize={depPageSize}
+                  onPageChange={setDepPage}
+                  onPageSizeChange={setDepPageSize}
+                  itemLabel="dépenses"
+                />
+              </>
             )}
           </div>
         </section>

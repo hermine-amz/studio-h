@@ -35,8 +35,8 @@ import {
   formatFcfa,
   daysSince,
   hoursUntil,
-  normalizeCountryCode,
 } from '@/lib/currency';
+import { CountryBadge } from '@/components/ui/CountryFlag';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -1169,9 +1169,7 @@ export default function CockpitPage() {
                             >
                               {prospect.nom_marque}
                             </Link>
-                            <span className="rounded bg-white border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
-                              {normalizeCountryCode(prospect.pays)}
-                            </span>
+                            <CountryBadge code={prospect.pays} />
                           </div>
                           <div className="text-xs text-zinc-500">
                             Sans contact depuis{' '}

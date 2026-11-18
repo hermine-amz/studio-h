@@ -27,17 +27,16 @@ import {
   ShoppingBag,
   Share2,
   User,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 import type { Prospect, ProspectStatut } from '@/types/database';
-import {
-  formatEur,
-  formatFcfa,
-  daysSince,
-  normalizeCountryCode,
-} from '@/lib/currency';
+import { formatEur, formatFcfa, daysSince } from '@/lib/currency';
+import { resolveIso2Code, getCountryByCode } from '@/lib/countries';
+import { CountryBadge, CountrySelect } from '@/components/ui/CountryFlag';
+import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -51,17 +50,7 @@ const KANBAN_COLUMNS: ProspectStatut[] = [
   'Perdu',
 ];
 
-const EUROPEAN_COUNTRIES = [
-  { code: 'FR', label: 'FR — France' },
-  { code: 'CH', label: 'CH — Suisse' },
-  { code: 'BE', label: 'BE — Belgique' },
-  { code: 'UK', label: 'UK — Royaume-Uni' },
-  { code: 'LU', label: 'LU — Luxembourg' },
-  { code: 'DE', label: 'DE — Allemagne' },
-  { code: 'IT', label: 'IT — Italie' },
-  { code: 'ES', label: 'ES — Espagne' },
-  { code: 'NL', label: 'NL — Pays-Bas' },
-];
+type SortField = 'nom_marque' | 'pays' | 'statut' | 'valeur' | 'suivi';
 
 export default function CrmPage() {
   const {
@@ -76,13 +65,18 @@ export default function CrmPage() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
-  // Default to List View as requested ("je veux vue en liste et apercu rapide en modal")
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [statusFilter, setStatusFilter] = useState<ProspectStatut | 'ALL'>(
     'ALL'
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
+
+  // Data Table Sorting & Pagination
+  const [sortField, setSortField] = useState<SortField>('suivi');
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   // Quick Preview Modal State
   const [quickPreviewId, setQuickPreviewId] = useState<string | null>(null);
@@ -113,7 +107,6 @@ export default function CrmPage() {
   const [valeurEstimee, setValeurEstimee] = useState('1500');
   const [notesStrategiques, setNotesStrategiques] = useState('');
 
-  // Optional initial links
   const [lienPubInitial, setLienPubInitial] = useState('');
   const [lienProduitInitial, setLienProduitInitial] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
@@ -138,13 +131,24 @@ export default function CrmPage() {
     }
   };
 
-  const filteredProspects = useMemo(() => {
-    return prospects.filter((p) => {
+  // Distinct countries present in prospects + top default countries
+  const activeCountryCodes = useMemo(() => {
+    const codes = new Set<string>(['FR', 'CH', 'BE', 'GB', 'DE', 'IT', 'ES', 'CA', 'US']);
+    prospects.forEach((p) => {
+      if (p.pays) codes.add(resolveIso2Code(p.pays));
+    });
+    return Array.from(codes);
+  }, [prospects]);
+
+  const filteredAndSortedProspects = useMemo(() => {
+    const list = prospects.filter((p) => {
       const matchesStatus =
         statusFilter === 'ALL' || p.statut === statusFilter;
+      const countryInfo = getCountryByCode(p.pays);
       const matchesSearch =
         !searchQuery.trim() ||
         p.nom_marque.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        countryInfo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.contact_nom || '')
           .toLowerCase()
           .includes(searchQuery.toLowerCase()) ||
@@ -152,21 +156,62 @@ export default function CrmPage() {
           .toLowerCase()
           .includes(searchQuery.toLowerCase());
 
-      const code = normalizeCountryCode(p.pays);
+      const code = resolveIso2Code(p.pays);
       const matchesCountry =
         countryFilter === 'ALL' || code === countryFilter;
 
       return matchesStatus && matchesSearch && matchesCountry;
     });
-  }, [prospects, statusFilter, searchQuery, countryFilter]);
+
+    return list.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'nom_marque') {
+        cmp = a.nom_marque.localeCompare(b.nom_marque);
+      } else if (sortField === 'pays') {
+        cmp = resolveIso2Code(a.pays).localeCompare(resolveIso2Code(b.pays));
+      } else if (sortField === 'statut') {
+        cmp = a.statut.localeCompare(b.statut);
+      } else if (sortField === 'valeur') {
+        cmp =
+          Number(a.valeur_estimee_eur || 0) - Number(b.valeur_estimee_eur || 0);
+      } else {
+        cmp =
+          new Date(a.date_dernier_contact).getTime() -
+          new Date(b.date_dernier_contact).getTime();
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+  }, [
+    prospects,
+    statusFilter,
+    searchQuery,
+    countryFilter,
+    sortField,
+    sortAsc,
+  ]);
+
+  const paginatedProspects = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedProspects.slice(start, start + pageSize);
+  }, [filteredAndSortedProspects, currentPage, pageSize]);
 
   const totalPipelineEur = useMemo(
     () =>
-      filteredProspects
+      filteredAndSortedProspects
         .filter((p) => p.statut !== 'Perdu')
         .reduce((acc, p) => acc + Number(p.valeur_estimee_eur || 0), 0),
-    [filteredProspects]
+    [filteredAndSortedProspects]
   );
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+    setCurrentPage(1);
+  };
 
   const requestStatusChange = async (
     id: string,
@@ -255,7 +300,7 @@ export default function CrmPage() {
 
     const created = await addProspect({
       nom_marque: nomMarque.trim(),
-      pays,
+      pays: resolveIso2Code(pays),
       logo_url: logoUrl.trim() || null,
       contact_nom: contactNom.trim() || null,
       contact_email: contactEmail.trim() || null,
@@ -278,7 +323,7 @@ export default function CrmPage() {
 
     toast({
       title: 'Prospect créé avec succès',
-      description: `${created.nom_marque} a été ajouté à votre liste.`,
+      description: `${created.nom_marque} a été ajouté à votre Data Table.`,
     });
 
     setNomMarque('');
@@ -347,7 +392,7 @@ export default function CrmPage() {
             Vue 02 — Acquisition & Clients Signés
           </span>
           <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
-            Prospects & Clients Europe
+            Prospects & Clients International
           </h1>
         </div>
 
@@ -361,8 +406,7 @@ export default function CrmPage() {
             />
           </div>
 
-          {/* Toggle List / Kanban */}
-          <div className="inline-flex rounded-xl bg-white border border-stone-200 p-1">
+          <div className="inline-flex rounded-xl bg-white border border-stone-300 p-1 shadow-xs">
             <button
               type="button"
               onClick={() => setViewMode('list')}
@@ -373,7 +417,7 @@ export default function CrmPage() {
               }`}
             >
               <List className="h-3.5 w-3.5" strokeWidth={1.5} />
-              <span>Vue Liste</span>
+              <span>Data Table</span>
             </button>
             <button
               type="button"
@@ -399,8 +443,8 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* Filter Bar (Search + Status Tabs + Country) */}
-      <div className="glass-card p-3.5 space-y-3">
+      {/* Filter Bar (Search + Country Filter with Flags + Status Tabs) */}
+      <div className="glass-card p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search
@@ -410,8 +454,11 @@ export default function CrmPage() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher une marque, un contact ou un email..."
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Rechercher une marque, un pays, un contact ou un email..."
               className="glass-input pl-9"
             />
           </div>
@@ -421,31 +468,50 @@ export default function CrmPage() {
               className="h-4 w-4 text-zinc-500 shrink-0 mr-1"
               strokeWidth={1.5}
             />
-            {['ALL', 'FR', 'CH', 'BE', 'UK', 'IT', 'DE', 'LU'].map((code) => (
+            <button
+              onClick={() => {
+                setCountryFilter('ALL');
+                setCurrentPage(1);
+              }}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all border shrink-0 ${
+                countryFilter === 'ALL'
+                  ? 'bg-[#568203] text-white border-[#568203]'
+                  : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              Tous Pays
+            </button>
+            {activeCountryCodes.map((code) => (
               <button
                 key={code}
-                onClick={() => setCountryFilter(code)}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-mono uppercase transition-all border shrink-0 ${
+                onClick={() => {
+                  setCountryFilter(code);
+                  setCurrentPage(1);
+                }}
+                className={`rounded-lg p-0.5 transition-all border shrink-0 ${
                   countryFilter === code
-                    ? 'bg-[#568203] text-white border-[#568203]'
-                    : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                    ? 'ring-2 ring-[#568203] border-[#568203]'
+                    : 'border-transparent opacity-80 hover:opacity-100'
                 }`}
               >
-                {code === 'ALL' ? 'Tous Pays' : code}
+                <CountryBadge code={code} />
               </button>
             ))}
           </div>
         </div>
 
         {/* Status Quick Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-stone-100">
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-2.5 border-t border-stone-200/75">
           <button
             type="button"
-            onClick={() => setStatusFilter('ALL')}
+            onClick={() => {
+              setStatusFilter('ALL');
+              setCurrentPage(1);
+            }}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
               statusFilter === 'ALL'
                 ? 'bg-[#568203] text-white border-[#568203]'
-                : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
             }`}
           >
             Tous les statuts ({prospects.length})
@@ -456,11 +522,14 @@ export default function CrmPage() {
               <button
                 key={st}
                 type="button"
-                onClick={() => setStatusFilter(st)}
+                onClick={() => {
+                  setStatusFilter(st);
+                  setCurrentPage(1);
+                }}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
                   statusFilter === st
                     ? 'bg-[#568203] text-white border-[#568203]'
-                    : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+                    : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
                 }`}
               >
                 {st} ({count})
@@ -470,10 +539,10 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* ================= VUE EN LISTE (DEFAULT) ================= */}
+      {/* ================= VUE DATA TABLE (DEFAULT) ================= */}
       {viewMode === 'list' && (
-        <section className="glass-card overflow-hidden">
-          {filteredProspects.length === 0 ? (
+        <section className="glass-card p-4 sm:p-5">
+          {filteredAndSortedProspects.length === 0 ? (
             <div className="p-10 text-center space-y-3">
               <p className="text-sm text-zinc-500">
                 Aucun prospect ou client trouvé.
@@ -487,226 +556,285 @@ export default function CrmPage() {
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-stone-200/90 bg-stone-50/80 text-[11px] uppercase tracking-wider text-zinc-500">
-                    <th className="py-3.5 px-4">Marque & Pays</th>
-                    <th className="py-3.5 px-4">Contact (Email / Tél)</th>
-                    <th className="py-3.5 px-4">Statut</th>
-                    <th className="py-3.5 px-4">Valeur (€ / FCFA)</th>
-                    <th className="py-3.5 px-4">Liens & Drive</th>
-                    <th className="py-3.5 px-4">Suivi</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-200/75 text-[13px]">
-                  {filteredProspects.map((prospect) => {
-                    const inactiveDays = daysSince(
-                      prospect.date_dernier_contact
-                    );
-                    const isStale =
-                      inactiveDays > 3 &&
-                      prospect.statut !== 'Signé' &&
-                      prospect.statut !== 'Perdu';
-                    const adsCount = prospect.liens_pubs?.length || 0;
-                    const prodsCount = prospect.liens_produits?.length || 0;
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-stone-200/90 bg-stone-50/90 text-[11px] uppercase tracking-wider text-zinc-600">
+                      <th className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSort('nom_marque')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#568203]"
+                        >
+                          <span>Marque</span>
+                          <ArrowUpDown className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </th>
+                      <th className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSort('pays')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#568203]"
+                        >
+                          <span>Pays</span>
+                          <ArrowUpDown className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </th>
+                      <th className="py-3.5 px-4">Contact (Email / Tél)</th>
+                      <th className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSort('statut')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#568203]"
+                        >
+                          <span>Statut</span>
+                          <ArrowUpDown className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </th>
+                      <th className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSort('valeur')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#568203]"
+                        >
+                          <span>Valeur (€ / FCFA)</span>
+                          <ArrowUpDown className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </th>
+                      <th className="py-3.5 px-4">Liens & Drive</th>
+                      <th className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSort('suivi')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#568203]"
+                        >
+                          <span>Suivi</span>
+                          <ArrowUpDown className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200/75 text-[13px]">
+                    {paginatedProspects.map((prospect) => {
+                      const inactiveDays = daysSince(
+                        prospect.date_dernier_contact
+                      );
+                      const isStale =
+                        inactiveDays > 3 &&
+                        prospect.statut !== 'Signé' &&
+                        prospect.statut !== 'Perdu';
+                      const adsCount = prospect.liens_pubs?.length || 0;
+                      const prodsCount = prospect.liens_produits?.length || 0;
 
-                    return (
-                      <tr
-                        key={prospect.id}
-                        onClick={() => setQuickPreviewId(prospect.id)}
-                        className="hover:bg-[#FFF8B9]/20 cursor-pointer transition-colors"
-                      >
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            {renderBrandAvatar(prospect, 'sm')}
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-zinc-900 hover:text-[#568203]">
+                      return (
+                        <tr
+                          key={prospect.id}
+                          onClick={() => setQuickPreviewId(prospect.id)}
+                          className="hover:bg-[#FFF8B9]/25 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              {renderBrandAvatar(prospect, 'sm')}
+                              <div className="min-w-0">
+                                <span className="font-semibold text-zinc-900 hover:text-[#568203] block truncate">
                                   {prospect.nom_marque}
                                 </span>
-                                <span className="rounded bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
-                                  {normalizeCountryCode(prospect.pays)}
-                                </span>
+                                {prospect.lien_boutique && (
+                                  <span className="text-xs text-zinc-400 truncate block max-w-[180px]">
+                                    {prospect.lien_boutique}
+                                  </span>
+                                )}
                               </div>
-                              {prospect.lien_boutique && (
-                                <span className="text-xs text-zinc-400 truncate block max-w-[200px]">
-                                  {prospect.lien_boutique}
-                                </span>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <CountryBadge code={prospect.pays} showName />
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="space-y-0.5 text-xs">
+                              <div className="font-medium text-zinc-800">
+                                {prospect.contact_nom || '—'}
+                              </div>
+                              {prospect.contact_email && (
+                                <div className="text-zinc-500 truncate max-w-[180px]">
+                                  {prospect.contact_email}
+                                </div>
+                              )}
+                              {prospect.contact_telephone && (
+                                <div className="text-zinc-500 font-mono text-[11px]">
+                                  {prospect.contact_telephone}
+                                </div>
                               )}
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-3.5 px-4">
-                          <div className="space-y-0.5 text-xs">
-                            <div className="font-medium text-zinc-800">
-                              {prospect.contact_nom || '—'}
-                            </div>
-                            {prospect.contact_email && (
-                              <div className="text-zinc-500 truncate max-w-[190px]">
-                                {prospect.contact_email}
-                              </div>
-                            )}
-                            {prospect.contact_telephone && (
-                              <div className="text-zinc-500 font-mono text-[11px]">
-                                {prospect.contact_telephone}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        <td
-                          className="py-3.5 px-4"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <select
-                            aria-label={`Statut de ${prospect.nom_marque}`}
-                            value={prospect.statut}
-                            onChange={(e) =>
-                              requestStatusChange(
-                                prospect.id,
-                                e.target.value as ProspectStatut
-                              )
-                            }
-                            className={`rounded-lg border px-2.5 py-1 text-xs focus:outline-none cursor-pointer ${getStatusBadgeStyle(
-                              prospect.statut
-                            )}`}
+                          <td
+                            className="py-3.5 px-4"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            {KANBAN_COLUMNS.map((st) => (
-                              <option
-                                key={st}
-                                value={st}
-                                className="bg-white text-zinc-900"
-                              >
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-zinc-900">
-                            {formatEur(prospect.valeur_estimee_eur)}
-                          </div>
-                          <div className="text-[11px] font-mono text-zinc-500">
-                            {formatFcfa(prospect.valeur_estimee_eur)}
-                          </div>
-                        </td>
-
-                        <td
-                          className="py-3.5 px-4"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {adsCount > 0 && (
-                              <span className="rounded-md bg-[#FFF8B9]/75 border border-[#568203]/25 px-2 py-0.5 text-[11px] font-medium text-zinc-800">
-                                {adsCount} pub{adsCount > 1 ? 's' : ''} FB
-                              </span>
-                            )}
-                            {prodsCount > 0 && (
-                              <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-700">
-                                {prodsCount} produit{prodsCount > 1 ? 's' : ''}
-                              </span>
-                            )}
-                            {prospect.drive_folder_id ? (
-                              <a
-                                href={`https://drive.google.com/drive/folders/${prospect.drive_folder_id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded-md bg-stone-100 hover:bg-stone-200 border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-[#568203]"
-                              >
-                                <FolderCheck
-                                  className="h-3 w-3"
-                                  strokeWidth={1.5}
-                                />
-                                <span>Drive</span>
-                              </a>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={creatingDriveId === prospect.id}
-                                onClick={(e) =>
-                                  handleManualDriveInit(e, prospect.id)
-                                }
-                                className="inline-flex items-center gap-1 rounded-md bg-white hover:bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-500"
-                              >
-                                <FolderPlus
-                                  className="h-3 w-3"
-                                  strokeWidth={1.5}
-                                />
-                                <span>
-                                  {creatingDriveId === prospect.id
-                                    ? '...'
-                                    : '+ Drive'}
-                                </span>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          {isStale ? (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/75 border border-[#568203]/30 px-2 py-0.5 text-[11px] font-medium text-zinc-900">
-                              <AlertCircle
-                                className="h-3 w-3 text-[#568203]"
-                                strokeWidth={1.5}
-                              />
-                              {inactiveDays} j
-                            </span>
-                          ) : (
-                            <span className="text-xs text-zinc-500">
-                              Il y a {inactiveDays} j
-                            </span>
-                          )}
-                        </td>
-
-                        <td
-                          className="py-3.5 px-4 text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="inline-flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setQuickPreviewId(prospect.id)}
-                              className="btn-secondary py-1.5 px-2.5 text-xs"
-                              title="Aperçu rapide en modal"
-                            >
-                              <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              <span>Aperçu</span>
-                            </button>
-                            <Link
-                              href={`/crm/${prospect.id}`}
-                              className="btn-primary py-1.5 px-2.5 text-xs"
-                            >
-                              <span>Fiche 360°</span>
-                              <ArrowUpRight
-                                className="h-3.5 w-3.5"
-                                strokeWidth={1.5}
-                              />
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDeleteProspect(
+                            <select
+                              aria-label={`Statut de ${prospect.nom_marque}`}
+                              value={prospect.statut}
+                              onChange={(e) =>
+                                requestStatusChange(
                                   prospect.id,
-                                  prospect.nom_marque
+                                  e.target.value as ProspectStatut
                                 )
                               }
-                              className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              aria-label="Supprimer"
+                              className={`rounded-lg border px-2.5 py-1 text-xs focus:outline-none cursor-pointer ${getStatusBadgeStyle(
+                                prospect.statut
+                              )}`}
                             >
-                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              {KANBAN_COLUMNS.map((st) => (
+                                <option
+                                  key={st}
+                                  value={st}
+                                  className="bg-white text-zinc-900"
+                                >
+                                  {st}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-zinc-900">
+                              {formatEur(prospect.valeur_estimee_eur)}
+                            </div>
+                            <div className="text-[11px] font-mono text-zinc-500">
+                              {formatFcfa(prospect.valeur_estimee_eur)}
+                            </div>
+                          </td>
+
+                          <td
+                            className="py-3.5 px-4"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {adsCount > 0 && (
+                                <span className="rounded-md bg-[#FFF8B9]/80 border border-[#568203]/25 px-2 py-0.5 text-[11px] font-medium text-zinc-800">
+                                  {adsCount} pub{adsCount > 1 ? 's' : ''} FB
+                                </span>
+                              )}
+                              {prodsCount > 0 && (
+                                <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-700">
+                                  {prodsCount} produit{prodsCount > 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {prospect.drive_folder_id ? (
+                                <a
+                                  href={`https://drive.google.com/drive/folders/${prospect.drive_folder_id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-md bg-stone-100 hover:bg-stone-200 border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-[#568203]"
+                                >
+                                  <FolderCheck
+                                    className="h-3 w-3"
+                                    strokeWidth={1.5}
+                                  />
+                                  <span>Drive</span>
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={creatingDriveId === prospect.id}
+                                  onClick={(e) =>
+                                    handleManualDriveInit(e, prospect.id)
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md bg-white hover:bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-500"
+                                >
+                                  <FolderPlus
+                                    className="h-3 w-3"
+                                    strokeWidth={1.5}
+                                  />
+                                  <span>
+                                    {creatingDriveId === prospect.id
+                                      ? '...'
+                                      : '+ Drive'}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {isStale ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-[#FFF8B9]/75 border border-[#568203]/30 px-2 py-0.5 text-[11px] font-medium text-zinc-900">
+                                <AlertCircle
+                                  className="h-3 w-3 text-[#568203]"
+                                  strokeWidth={1.5}
+                                />
+                                {inactiveDays} j
+                              </span>
+                            ) : (
+                              <span className="text-xs text-zinc-500">
+                                Il y a {inactiveDays} j
+                              </span>
+                            )}
+                          </td>
+
+                          <td
+                            className="py-3.5 px-4 text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setQuickPreviewId(prospect.id)}
+                                className="btn-secondary py-1.5 px-2.5 text-xs"
+                                title="Aperçu rapide en modal"
+                              >
+                                <Eye
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={1.5}
+                                />
+                                <span>Aperçu</span>
+                              </button>
+                              <Link
+                                href={`/crm/${prospect.id}`}
+                                className="btn-primary py-1.5 px-2.5 text-xs"
+                              >
+                                <span>Fiche 360°</span>
+                                <ArrowUpRight
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={1.5}
+                                />
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteProspect(
+                                    prospect.id,
+                                    prospect.nom_marque
+                                  )
+                                }
+                                className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                aria-label="Supprimer"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <DataTablePagination
+                totalItems={filteredAndSortedProspects.length}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="prospects & clients"
+              />
+            </>
           )}
         </section>
       )}
@@ -715,7 +843,9 @@ export default function CrmPage() {
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4 items-start">
           {KANBAN_COLUMNS.map((col) => {
-            const colItems = filteredProspects.filter((p) => p.statut === col);
+            const colItems = filteredAndSortedProspects.filter(
+              (p) => p.statut === col
+            );
             const colTotalEur = colItems.reduce(
               (sum, item) => sum + Number(item.valeur_estimee_eur || 0),
               0
@@ -742,8 +872,8 @@ export default function CrmPage() {
                   isDropTarget
                     ? 'bg-[#FFF8B9]/40 border-[#568203]'
                     : col === 'Signé'
-                      ? 'bg-gradient-to-b from-white to-[#FFF8B9]/25 border-[#568203]/30 shadow-sm'
-                      : 'bg-white border-stone-200/85 shadow-sm'
+                      ? 'glass-card-avocado'
+                      : 'glass-card'
                 }`}
               >
                 <div className="pb-2.5 mb-3 border-b border-stone-200/75">
@@ -783,9 +913,7 @@ export default function CrmPage() {
                             {prospect.nom_marque}
                           </span>
                         </div>
-                        <span className="rounded bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
-                          {normalizeCountryCode(prospect.pays)}
-                        </span>
+                        <CountryBadge code={prospect.pays} />
                       </div>
 
                       <div className="rounded-lg bg-stone-50 border border-stone-200/80 p-2.5">
@@ -825,9 +953,7 @@ export default function CrmPage() {
                     <h2 className="text-lg font-semibold text-zinc-900">
                       {quickProspect.nom_marque}
                     </h2>
-                    <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-xs font-mono uppercase text-zinc-700">
-                      {normalizeCountryCode(quickProspect.pays)}
-                    </span>
+                    <CountryBadge code={quickProspect.pays} showName />
                     <span
                       className={`rounded-md border px-2.5 py-0.5 text-xs ${getStatusBadgeStyle(
                         quickProspect.statut
@@ -1000,7 +1126,6 @@ export default function CrmPage() {
 
             {/* Quick Facebook Ads Links & Product Links */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Facebook Ads */}
               <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
@@ -1044,7 +1169,6 @@ export default function CrmPage() {
                 </div>
               </div>
 
-              {/* Products */}
               <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
@@ -1089,7 +1213,6 @@ export default function CrmPage() {
               </div>
             </div>
 
-            {/* Strategic Notes */}
             {quickProspect.notes_strategiques && (
               <div className="rounded-xl bg-stone-50 border border-stone-200 p-3.5 space-y-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -1138,7 +1261,7 @@ export default function CrmPage() {
         </div>
       )}
 
-      {/* ================= MODAL : CRÉATION RAPIDE D'UN PROSPECT ================= */}
+      {/* ================= MODAL : CRÉATION RAPIDE D'UN PROSPECT (AVEC TOUS LES PAYS & DRAPEAUX) ================= */}
       {isAddModalOpen && (
         <div
           style={{ zIndex: 2147483600 }}
@@ -1156,7 +1279,7 @@ export default function CrmPage() {
                     Création Rapide d’un Prospect / Client
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Logo optionnel, coordonnées et liens Pubs Facebook / Produits / Réseaux
+                    Logo optionnel, choix de tous les pays avec drapeau et liens
                   </p>
                 </div>
               </div>
@@ -1209,8 +1332,8 @@ export default function CrmPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1 w-full">
-                  <div className="sm:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3.5 flex-1 w-full">
+                  <div className="sm:col-span-3">
                     <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                       Nom de la marque *
                     </label>
@@ -1224,21 +1347,11 @@ export default function CrmPage() {
                     />
                   </div>
 
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                      Code Pays
+                      Pays (Tous pays)
                     </label>
-                    <select
-                      value={pays}
-                      onChange={(e) => setPays(e.target.value)}
-                      className="glass-input"
-                    >
-                      {EUROPEAN_COUNTRIES.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
+                    <CountrySelect value={pays} onChange={setPays} />
                   </div>
                 </div>
               </div>
