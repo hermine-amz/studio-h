@@ -137,6 +137,7 @@ function ProductionWorkshopContent() {
 
   // New Order Modal Form
   const [prospectId, setProspectId] = useState(prospects[0]?.id || '');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [typeCommande, setTypeCommande] =
     useState<TypeCommandeUgc>('commande_client');
   const [nomPack, setNomPack] = useState('');
@@ -496,8 +497,13 @@ function ProductionWorkshopContent() {
         if (activeOrder.drive_subfolder_id) {
           formData.append('driveSubfolderId', activeOrder.drive_subfolder_id);
         }
-        if (activeClient?.drive_folder_id) {
-          formData.append('driveParentFolderId', activeClient.drive_folder_id);
+        const linkedProd = (activeClient?.produits || []).find(
+          (pr) => pr.id === activeOrder.produit_id
+        );
+        const parentDriveId =
+          linkedProd?.drive_folder_id || activeClient?.drive_folder_id;
+        if (parentDriveId) {
+          formData.append('driveParentFolderId', parentDriveId);
         }
 
         const response = await fetch('/api/drive/upload', {
@@ -620,13 +626,37 @@ function ProductionWorkshopContent() {
       : newOrderLinks;
     const isTrial = typeCommande === 'essai_gratuit';
 
+    const selectedClient = prospects.find((p) => p.id === prospectId);
+    const linkedProduct = (selectedClient?.produits || []).find(
+      (pr) => pr.id === selectedProductId
+    );
+
+    const combinedLinks = [...finalLinks];
+    if (linkedProduct?.lien_produit && !combinedLinks.includes(linkedProduct.lien_produit)) {
+      combinedLinks.push(linkedProduct.lien_produit);
+    }
+    if (linkedProduct?.liens_pubs?.length) {
+      linkedProduct.liens_pubs.forEach((ad) => {
+        if (!combinedLinks.includes(ad)) combinedLinks.push(ad);
+      });
+    }
+
+    const combinedPhotos = [...newOrderPhotos];
+    if (linkedProduct?.photos_produit?.length) {
+      linkedProduct.photos_produit.forEach((ph) => {
+        if (!combinedPhotos.includes(ph)) combinedPhotos.push(ph);
+      });
+    }
+
     const created = await addCommande({
       prospect_id: prospectId,
+      produit_id: linkedProduct?.id || null,
+      produit_nom: linkedProduct?.nom_produit || null,
       type_commande: typeCommande,
       nom_pack: nomPack.trim(),
       brief_produit: briefProduit.trim() || null,
-      liens_reference: finalLinks,
-      photos_reference: newOrderPhotos,
+      liens_reference: combinedLinks,
+      photos_reference: combinedPhotos,
       prompts_scenes: [],
       statut_production: 'Brief reçu',
       montant_eur: isTrial ? 0 : Number(montantEur) || 0,
@@ -638,6 +668,7 @@ function ProductionWorkshopContent() {
     });
 
     setSelectedOrderId(created.id);
+    setSelectedProductId('');
     setNomPack('');
     setBriefProduit('');
     setNewOrderLinkInput('');
@@ -858,7 +889,7 @@ function ProductionWorkshopContent() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         className={`rounded-md px-2 py-0.5 text-[10px] font-semibold border ${
                           isTrial
@@ -870,6 +901,11 @@ function ProductionWorkshopContent() {
                           ? 'Essai Gratuit / Démo Prospect (0 €)'
                           : 'Commande Client Réelle'}
                       </span>
+                      {ord.produit_nom && (
+                        <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[10px] font-medium text-zinc-700 truncate max-w-[160px]">
+                          Produit : {ord.produit_nom}
+                        </span>
+                      )}
                     </div>
 
                     {ord.brief_produit && (
@@ -1913,7 +1949,10 @@ function ProductionWorkshopContent() {
                 <select
                   required
                   value={prospectId}
-                  onChange={(e) => setProspectId(e.target.value)}
+                  onChange={(e) => {
+                    setProspectId(e.target.value);
+                    setSelectedProductId('');
+                  }}
                   className="glass-input"
                 >
                   <option value="">Sélectionner un client...</option>
@@ -1924,6 +1963,31 @@ function ProductionWorkshopContent() {
                   ))}
                 </select>
               </div>
+
+              {(() => {
+                const selClient = prospects.find((p) => p.id === prospectId);
+                const prods = selClient?.produits || [];
+                if (prods.length === 0) return null;
+                return (
+                  <div>
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                      Produit concerné (Importe ses photos & liens automatiquement)
+                    </label>
+                    <select
+                      value={selectedProductId}
+                      onChange={(e) => setSelectedProductId(e.target.value)}
+                      className="glass-input"
+                    >
+                      <option value="">Aucun produit spécifique (Général)</option>
+                      {prods.map((pr) => (
+                        <option key={pr.id} value={pr.id}>
+                          {pr.nom_produit}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">

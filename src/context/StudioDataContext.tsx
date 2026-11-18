@@ -10,6 +10,7 @@ import React, {
 import type {
   Prospect,
   ProspectStatut,
+  ClientProduct,
   CommandeUgc,
   StatutProduction,
   StatutPaiement,
@@ -41,6 +42,7 @@ function serializeProspectNotes(prospect: Partial<Prospect>): string {
     liens_pubs: prospect.liens_pubs || [],
     liens_produits: prospect.liens_produits || [],
     liens_reseaux: prospect.liens_reseaux || {},
+    produits: prospect.produits || [],
   };
   return `${baseNotes}${META_MARKER}${JSON.stringify(meta)}${META_END}`;
 }
@@ -59,6 +61,7 @@ function deserializeProspect(raw: Prospect): Prospect {
       liens_pubs: raw.liens_pubs || [],
       liens_produits: raw.liens_produits || [],
       liens_reseaux: raw.liens_reseaux || {},
+      produits: raw.produits || [],
     };
   }
   const cleanNotes = notesRaw.slice(0, idx).trim();
@@ -85,12 +88,14 @@ function deserializeProspect(raw: Prospect): Prospect {
         raw.liens_reseaux && Object.keys(raw.liens_reseaux).length > 0
           ? raw.liens_reseaux
           : meta.liens_reseaux || {},
+      produits: raw.produits?.length ? raw.produits : meta.produits || [],
     };
   } catch {
     return {
       ...raw,
       drive_folder_id: validDriveId,
       notes_strategiques: cleanNotes,
+      produits: raw.produits || [],
     };
   }
 }
@@ -99,6 +104,8 @@ function serializeCommandeBrief(cmd: Partial<CommandeUgc>): string {
   const baseBrief = (cmd.brief_produit || '').split(META_MARKER)[0].trim();
   const meta = {
     type_commande: cmd.type_commande || 'commande_client',
+    produit_id: cmd.produit_id || null,
+    produit_nom: cmd.produit_nom || null,
     liens_reference: cmd.liens_reference || [],
     photos_reference: cmd.photos_reference || [],
     prompts_scenes: cmd.prompts_scenes || [],
@@ -114,11 +121,9 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
   if (idx === -1) {
     return {
       ...raw,
-      type_commande:
-        raw.type_commande ||
-        (Number(raw.montant_eur) === 0 && raw.statut_paiement !== 'Payé'
-          ? 'commande_client'
-          : 'commande_client'),
+      type_commande: raw.type_commande || 'commande_client',
+      produit_id: raw.produit_id || null,
+      produit_nom: raw.produit_nom || null,
       drive_subfolder_id: validSubfolder,
       liens_reference: raw.liens_reference || [],
       photos_reference: raw.photos_reference || [],
@@ -135,6 +140,8 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
     return {
       ...raw,
       type_commande: raw.type_commande || meta.type_commande || 'commande_client',
+      produit_id: raw.produit_id ?? meta.produit_id ?? null,
+      produit_nom: raw.produit_nom ?? meta.produit_nom ?? null,
       drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
       liens_reference: raw.liens_reference?.length
@@ -151,6 +158,8 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
     return {
       ...raw,
       type_commande: raw.type_commande || 'commande_client',
+      produit_id: raw.produit_id || null,
+      produit_nom: raw.produit_nom || null,
       drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
       prompts_scenes: raw.prompts_scenes || [],
@@ -257,6 +266,22 @@ interface StudioDataContextValue {
     prospectId: string,
     subfolderName: string
   ) => Promise<DriveSubfolder | null>;
+
+  // Client Products
+  addClientProduct: (
+    prospectId: string,
+    product: Omit<ClientProduct, 'id' | 'created_at'>
+  ) => Promise<ClientProduct | null>;
+  updateClientProduct: (
+    prospectId: string,
+    productId: string,
+    patch: Partial<ClientProduct>
+  ) => Promise<void>;
+  deleteClientProduct: (prospectId: string, productId: string) => Promise<void>;
+  createProductDriveFolder: (
+    prospectId: string,
+    productId: string
+  ) => Promise<string | null>;
 
   // Commandes UGC
   addCommande: (
@@ -788,6 +813,114 @@ export function StudioDataProvider({
     }
   }, []);
 
+  // --- CLIENT PRODUCTS ---
+  const addClientProduct = useCallback(
+    async (
+      prospectId: string,
+      product: Omit<ClientProduct, 'id' | 'created_at'>
+    ): Promise<ClientProduct | null> => {
+      const target = prospects.find((p) => p.id === prospectId);
+      if (!target) return null;
+
+      const newProduct: ClientProduct = {
+        ...product,
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+      };
+
+      const nextProducts = [newProduct, ...(target.produits || [])];
+      await updateProspect(prospectId, { produits: nextProducts });
+      return newProduct;
+    },
+    [prospects, updateProspect]
+  );
+
+  const updateClientProduct = useCallback(
+    async (
+      prospectId: string,
+      productId: string,
+      patch: Partial<ClientProduct>
+    ) => {
+      const target = prospects.find((p) => p.id === prospectId);
+      if (!target) return;
+
+      const nextProducts = (target.produits || []).map((prod) =>
+        prod.id === productId ? { ...prod, ...patch } : prod
+      );
+      await updateProspect(prospectId, { produits: nextProducts });
+    },
+    [prospects, updateProspect]
+  );
+
+  const deleteClientProduct = useCallback(
+    async (prospectId: string, productId: string) => {
+      const target = prospects.find((p) => p.id === prospectId);
+      if (!target) return;
+
+      const nextProducts = (target.produits || []).filter(
+        (prod) => prod.id !== productId
+      );
+      await updateProspect(prospectId, { produits: nextProducts });
+    },
+    [prospects, updateProspect]
+  );
+
+  const createProductDriveFolder = useCallback(
+    async (prospectId: string, productId: string): Promise<string | null> => {
+      const target = prospects.find((p) => p.id === prospectId);
+      const product = (target?.produits || []).find((pr) => pr.id === productId);
+      if (!target || !product) return null;
+
+      const existing = cleanDriveId(product.drive_folder_id);
+      if (existing) return existing;
+
+      try {
+        let parentId = cleanDriveId(target.drive_folder_id);
+        if (!parentId) {
+          parentId = await createProspectDriveFolder(prospectId);
+        }
+
+        const folderName = `Produit_${product.nom_produit
+          .trim()
+          .replace(/\s+/g, '_')}`;
+
+        const res = await fetch('/api/drive/create-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prospectId: target.id,
+            nomMarque: target.nom_marque,
+            parentFolderId: parentId || undefined,
+            subfolderName: folderName,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erreur API Drive');
+
+        const folderId = data.folderId as string;
+        await updateClientProduct(prospectId, productId, {
+          drive_folder_id: folderId,
+        });
+
+        toast({
+          title: 'Dossier Drive du produit créé',
+          description: `Sous-dossier "${folderName}" créé dans le Drive de ${target.nom_marque}.`,
+          type: 'success',
+        });
+        return folderId;
+      } catch (err) {
+        toast({
+          title: 'Erreur Google Drive Produit',
+          description:
+            err instanceof Error ? err.message : 'Création impossible.',
+          type: 'error',
+        });
+        return null;
+      }
+    },
+    [prospects, createProspectDriveFolder, updateClientProduct, toast]
+  );
+
   // --- COMMANDES UGC ---
   const addCommande = useCallback(
     async (
@@ -1280,6 +1413,10 @@ export function StudioDataProvider({
         deleteProspect,
         createProspectDriveFolder,
         createClientSubfolder,
+        addClientProduct,
+        updateClientProduct,
+        deleteClientProduct,
+        createProductDriveFolder,
         addCommande,
         updateCommandeStatutProduction,
         updateCommandeStatutPaiement,

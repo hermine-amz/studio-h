@@ -69,6 +69,9 @@ function Client360Content() {
     deleteProspect,
     createProspectDriveFolder,
     createClientSubfolder,
+    addClientProduct,
+    deleteClientProduct,
+    createProductDriveFolder,
     addCommande,
   } = useStudioData();
   const { toast } = useToast();
@@ -79,25 +82,30 @@ function Client360Content() {
     [prospects, clientId]
   );
 
-  const [activeTab, setActiveTab] = useState<'infos' | '360'>(() => {
+  const [activeTab, setActiveTab] = useState<'infos' | 'produits' | '360'>(() => {
     const paramTab = searchParams.get('tab');
-    if (paramTab === '360' || paramTab === 'infos') return paramTab;
+    if (paramTab === '360' || paramTab === 'infos' || paramTab === 'produits') {
+      return paramTab;
+    }
     return 'infos';
   });
 
   useEffect(() => {
     const paramTab = searchParams.get('tab');
-    if (paramTab === '360' || paramTab === 'infos') {
+    if (paramTab === '360' || paramTab === 'infos' || paramTab === 'produits') {
       setActiveTab(paramTab);
     } else if (client) {
       setActiveTab(client.statut === 'Signé' ? '360' : 'infos');
     }
   }, [client?.id, client?.statut, searchParams]);
 
-  const clientOrders = useMemo(
-    () => commandes.filter((c) => c.prospect_id === clientId),
-    [commandes, clientId]
-  );
+  const [selectedProductFilter, setSelectedProductFilter] = useState<string>('ALL');
+
+  const clientOrders = useMemo(() => {
+    const all = commandes.filter((c) => c.prospect_id === clientId);
+    if (selectedProductFilter === 'ALL') return all;
+    return all.filter((c) => c.produit_id === selectedProductFilter);
+  }, [commandes, clientId, selectedProductFilter]);
 
   const clientMedias = useMemo(() => {
     const orderIds = new Set(clientOrders.map((c) => c.id));
@@ -211,8 +219,18 @@ function Client360Content() {
   const [subfolderName, setSubfolderName] = useState('');
   const [isCreatingSub, setIsCreatingSub] = useState(false);
 
+  // New Product Form State
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdLink, setNewProdLink] = useState('');
+  const [newProdAdInput, setNewProdAdInput] = useState('');
+  const [newProdAds, setNewProdAds] = useState<string[]>([]);
+  const [newProdPhotos, setNewProdPhotos] = useState<string[]>([]);
+  const [newProdNotes, setNewProdNotes] = useState('');
+  const prodPhotoInputRef = useRef<HTMLInputElement | null>(null);
+
   // New Order Modal State
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [selectedOrderProductId, setSelectedOrderProductId] = useState<string>('');
   const [typeCommande, setTypeCommande] =
     useState<TypeCommandeUgc>('commande_client');
   const [nomPack, setNomPack] = useState('');
@@ -382,16 +400,92 @@ function Client360Content() {
     }
   };
 
+  const handleAddProductPhoto = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const added: string[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await fileToResizedDataUrl(file, 750, 0.82);
+        added.push(dataUrl);
+      }
+      setNewProdPhotos((prev) => [...prev, ...added]);
+      toast({ title: 'Photo(s) produit ajoutée(s)' });
+    } catch {
+      toast({ title: 'Image invalide', type: 'error' });
+    }
+  };
+
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client || !newProdName.trim()) return;
+
+    const finalAds = newProdAdInput.trim()
+      ? [...newProdAds, newProdAdInput.trim()]
+      : newProdAds;
+
+    await addClientProduct(client.id, {
+      nom_produit: newProdName.trim(),
+      lien_produit: newProdLink.trim() || undefined,
+      liens_pubs: finalAds,
+      photos_produit: newProdPhotos,
+      notes_produit: newProdNotes.trim() || undefined,
+      drive_folder_id: null,
+    });
+
+    toast({
+      title: 'Produit ajouté au catalogue du client',
+      description: `"${newProdName}" est prêt pour lier vos commandes, images et créas.`,
+    });
+
+    setNewProdName('');
+    setNewProdLink('');
+    setNewProdAdInput('');
+    setNewProdAds([]);
+    setNewProdPhotos([]);
+    setNewProdNotes('');
+  };
+
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!client) return;
+    const ok = await confirm({
+      title: `Supprimer le produit "${productName}" ?`,
+      description: `Voulez-vous retirer "${productName}" du catalogue de ${client.nom_marque} ? Les commandes existantes seront conservées.`,
+      confirmLabel: 'Supprimer le produit',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    await deleteClientProduct(client.id, productId);
+    if (selectedProductFilter === productId) {
+      setSelectedProductFilter('ALL');
+    }
+    toast({ title: 'Produit supprimé' });
+  };
+
   const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!client || !nomPack.trim()) return;
 
+    const linkedProduct = (client.produits || []).find(
+      (p) => p.id === selectedOrderProductId
+    );
     const isTrial = typeCommande === 'essai_gratuit';
+
+    const refLinks: string[] = [];
+    if (linkedProduct?.lien_produit) refLinks.push(linkedProduct.lien_produit);
+    if (linkedProduct?.liens_pubs?.length) {
+      refLinks.push(...linkedProduct.liens_pubs);
+    }
+
     await addCommande({
       prospect_id: client.id,
+      produit_id: linkedProduct?.id || null,
+      produit_nom: linkedProduct?.nom_produit || null,
       type_commande: typeCommande,
       nom_pack: nomPack.trim(),
       brief_produit: briefProduit.trim() || null,
+      liens_reference: refLinks,
+      photos_reference: linkedProduct?.photos_produit || [],
       statut_production: statutProduction,
       montant_eur: isTrial ? 0 : Number(montantEur) || 0,
       statut_paiement: isTrial ? 'Essai gratuit' : statutPaiement,
@@ -405,11 +499,14 @@ function Client360Content() {
       title: isTrial
         ? 'Essai gratuit / Démo créé'
         : 'Commande Client UGC créée',
-      description: `Le pack "${nomPack}" a été rattaché à ${client.nom_marque}.`,
+      description: linkedProduct
+        ? `Pack "${nomPack}" lié au produit "${linkedProduct.nom_produit}".`
+        : `Le pack "${nomPack}" a été rattaché à ${client.nom_marque}.`,
     });
 
     setNomPack('');
     setBriefProduit('');
+    setSelectedOrderProductId('');
     setIsOrderModalOpen(false);
   };
 
@@ -656,7 +753,20 @@ function Client360Content() {
           }`}
         >
           <Link2 className="h-4 w-4" strokeWidth={1.5} />
-          <span>Logo, Coordonnées, Pubs Facebook, Produits & Réseaux</span>
+          <span>Logo, Coordonnées, Pubs & Réseaux</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('produits')}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-all border shrink-0 ${
+            activeTab === 'produits'
+              ? 'bg-[#568203] text-white border-[#568203] shadow-sm'
+              : 'bg-white text-zinc-700 border-stone-200 hover:bg-stone-100'
+          }`}
+        >
+          <ShoppingBag className="h-4 w-4" strokeWidth={1.5} />
+          <span>Catalogue Produits ({(client.produits || []).length})</span>
         </button>
 
         <button
@@ -1174,9 +1284,399 @@ function Client360Content() {
         </div>
       )}
 
-      {/* ================= ONGLET 2 : VUE 360°, DRIVE, COMMANDES & CRÉATIONS ================= */}
+      {/* ================= ONGLET 2 : CATALOGUE PRODUITS (LIER LIENS, IMAGES, PUBS, DRIVE & CRÉAS PAR PRODUIT) ================= */}
+      {activeTab === 'produits' && (
+        <div className="space-y-5">
+          {/* Add Product Form */}
+          <form
+            onSubmit={handleCreateProduct}
+            className="glass-card p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 p-2">
+                  <ShoppingBag
+                    className="h-4 w-4 text-[#568203]"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-semibold text-zinc-900">
+                    Ajouter un Produit au Catalogue de {client.nom_marque}
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    Centralisez les liens, photos packshot, pubs FB, dossier Drive et créas pour chaque produit
+                  </p>
+                </div>
+              </div>
+              <button type="submit" className="btn-primary">
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                <span>Ajouter le produit</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Nom du Produit *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProdName}
+                  onChange={(e) => setNewProdName(e.target.value)}
+                  placeholder="Ex: Sérum Éclat Botanique 30ml"
+                  className="glass-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Lien page produit (Optionnel)
+                </label>
+                <input
+                  type="url"
+                  value={newProdLink}
+                  onChange={(e) => setNewProdLink(e.target.value)}
+                  placeholder="https://marque.eu/products/serum-eclat"
+                  className="glass-input"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Liens Pubs Facebook de ce produit
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newProdAdInput}
+                    onChange={(e) => setNewProdAdInput(e.target.value)}
+                    placeholder="https://www.facebook.com/ads/library/..."
+                    className="glass-input flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newProdAdInput.trim()) return;
+                      setNewProdAds((prev) => [
+                        ...prev,
+                        newProdAdInput.trim(),
+                      ]);
+                      setNewProdAdInput('');
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    + Pub
+                  </button>
+                </div>
+                {newProdAds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {newProdAds.map((ad, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 rounded-lg bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] text-zinc-700"
+                      >
+                        <span className="truncate max-w-[180px]">{ad}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewProdAds((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="text-zinc-400 hover:text-red-600"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <input
+                  ref={prodPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleAddProductPhoto(e.target.files)}
+                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Photos Packshot du Produit ({newProdPhotos.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => prodPhotoInputRef.current?.click()}
+                    className="btn-secondary py-1 px-2.5 text-xs"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <span>+ Importer photos</span>
+                  </button>
+                </div>
+                {newProdPhotos.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {newProdPhotos.map((ph, idx) => (
+                      <div
+                        key={idx}
+                        className="relative h-12 w-12 rounded-lg overflow-hidden border border-stone-200"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={ph}
+                          alt="Packshot"
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewProdPhotos((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="absolute top-0 right-0 bg-zinc-900/75 text-white p-0.5"
+                        >
+                          <X className="h-2.5 w-2.5" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-700 mb-1">
+                Bénéfices clés, Angles & Notes du produit
+              </label>
+              <textarea
+                rows={2}
+                value={newProdNotes}
+                onChange={(e) => setNewProdNotes(e.target.value)}
+                placeholder="Promesse principale, ingrédients phares, objections clients..."
+                className="glass-input"
+              />
+            </div>
+          </form>
+
+          {/* Products List */}
+          {(client.produits || []).length === 0 ? (
+            <div className="glass-card p-8 text-center text-xs text-zinc-500">
+              Aucun produit enregistré dans le catalogue de {client.nom_marque}. Ajoutez-en un ci-dessus pour lier ses images, liens, pubs et créas UGC.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {(client.produits || []).map((prod) => {
+                const prodOrders = commandes.filter(
+                  (c) => c.prospect_id === client.id && c.produit_id === prod.id
+                );
+                const prodOrderIds = new Set(prodOrders.map((o) => o.id));
+                const prodMediasCount = medias.filter((m) =>
+                  prodOrderIds.has(m.commande_id)
+                ).length;
+
+                return (
+                  <div
+                    key={prod.id}
+                    className="glass-card p-5 flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-base font-semibold text-zinc-900">
+                            {prod.nom_produit}
+                          </h3>
+                          {prod.lien_produit && (
+                            <a
+                              href={prod.lien_produit}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-[#568203] hover:underline mt-0.5"
+                            >
+                              <span className="truncate max-w-[260px]">
+                                {prod.lien_produit}
+                              </span>
+                              <ExternalLink
+                                className="h-3 w-3 shrink-0"
+                                strokeWidth={1.5}
+                              />
+                            </a>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteProduct(prod.id, prod.nom_produit)
+                          }
+                          className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                          aria-label="Supprimer le produit"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                      </div>
+
+                      {prod.photos_produit && prod.photos_produit.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {prod.photos_produit.map((ph, idx) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={idx}
+                              src={ph}
+                              alt={prod.nom_produit}
+                              className="h-16 w-16 rounded-xl object-cover border border-stone-200"
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {prod.notes_produit && (
+                        <p className="text-xs text-zinc-600 bg-stone-50 border border-stone-200/80 rounded-xl p-3 leading-relaxed">
+                          {prod.notes_produit}
+                        </p>
+                      )}
+
+                      {prod.liens_pubs && prod.liens_pubs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {prod.liens_pubs.map((ad, idx) => (
+                            <a
+                              key={idx}
+                              href={ad}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg bg-[#FFF8B9]/75 border border-[#568203]/25 px-2.5 py-1 text-[11px] font-medium text-zinc-900 hover:underline"
+                            >
+                              <Megaphone
+                                className="h-3 w-3 text-[#568203]"
+                                strokeWidth={1.5}
+                              />
+                              <span>Pub FB #{idx + 1}</span>
+                              <ExternalLink
+                                className="h-2.5 w-2.5"
+                                strokeWidth={1.5}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-stone-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs text-zinc-600">
+                        <span>
+                          <strong>{prodOrders.length}</strong> commande(s) •{' '}
+                          <strong>{prodMediasCount}</strong> créa(s)
+                        </span>
+                        {prod.drive_folder_id ? (
+                          <a
+                            href={`https://drive.google.com/drive/folders/${prod.drive_folder_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[#568203] font-medium hover:underline"
+                          >
+                            <Folder className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            <span>Drive Produit</span>
+                            <ExternalLink
+                              className="h-3 w-3"
+                              strokeWidth={1.5}
+                            />
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              createProductDriveFolder(client.id, prod.id)
+                            }
+                            className="inline-flex items-center gap-1 text-zinc-600 hover:text-[#568203]"
+                          >
+                            <FolderPlus
+                              className="h-3.5 w-3.5"
+                              strokeWidth={1.5}
+                            />
+                            <span>Créer Drive Produit</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrderProductId(prod.id);
+                            setIsOrderModalOpen(true);
+                          }}
+                          className="btn-primary py-1.5 px-3 text-xs flex-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          <span>Commande / Essai</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProductFilter(prod.id);
+                            setActiveTab('360');
+                          }}
+                          className="btn-secondary py-1.5 px-3 text-xs"
+                        >
+                          <span>Voir créas ({prodMediasCount})</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= ONGLET 3 : VUE 360°, DRIVE, COMMANDES & CRÉATIONS ================= */}
       {activeTab === '360' && (
         <div className="space-y-5">
+          {/* Product Filter Bar inside 360 View */}
+          {(client.produits || []).length > 0 && (
+            <div className="glass-card p-3 flex items-center gap-2 overflow-x-auto">
+              <span className="text-xs font-semibold text-zinc-600 shrink-0 ml-1">
+                Filtrer par produit :
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProductFilter('ALL');
+                  setOrdersPage(1);
+                }}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
+                  selectedProductFilter === 'ALL'
+                    ? 'bg-[#568203] text-white border-[#568203]'
+                    : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+                }`}
+              >
+                Tous les produits
+              </button>
+              {(client.produits || []).map((prod) => (
+                <button
+                  key={prod.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedProductFilter(prod.id);
+                    setOrdersPage(1);
+                  }}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-medium border shrink-0 transition-colors ${
+                    selectedProductFilter === prod.id
+                      ? 'bg-[#568203] text-white border-[#568203]'
+                      : 'bg-white text-zinc-600 border-stone-200 hover:bg-stone-100'
+                  }`}
+                >
+                  {prod.nom_produit}
+                </button>
+              ))}
+            </div>
+          )}
           {/* 1. Four Top KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="glass-card-avocado p-4 space-y-1.5">
@@ -1668,6 +2168,26 @@ function Client360Content() {
                   </button>
                 </div>
               </div>
+
+              {(client.produits || []).length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                    Produit concerné (Importe ses photos & liens automatiquement)
+                  </label>
+                  <select
+                    value={selectedOrderProductId}
+                    onChange={(e) => setSelectedOrderProductId(e.target.value)}
+                    className="glass-input"
+                  >
+                    <option value="">Aucun produit spécifique (Général)</option>
+                    {(client.produits || []).map((prod) => (
+                      <option key={prod.id} value={prod.id}>
+                        {prod.nom_produit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">

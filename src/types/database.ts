@@ -63,6 +63,17 @@ export interface ProspectReseauxSociaux {
   autres?: string;
 }
 
+export interface ClientProduct {
+  id: string;
+  nom_produit: string;
+  lien_produit?: string;
+  liens_pubs?: string[];
+  photos_produit?: string[];
+  notes_produit?: string;
+  drive_folder_id?: string | null;
+  created_at: string;
+}
+
 export interface Prospect {
   id: string;
   nom_marque: string;
@@ -75,6 +86,7 @@ export interface Prospect {
   liens_pubs?: string[];
   liens_produits?: string[];
   liens_reseaux?: ProspectReseauxSociaux;
+  produits?: ClientProduct[];
   statut: ProspectStatut;
   valeur_estimee_eur: number;
   drive_folder_id: string | null;
@@ -86,6 +98,8 @@ export interface Prospect {
 export interface CommandeUgc {
   id: string;
   prospect_id: string;
+  produit_id?: string | null;
+  produit_nom?: string | null;
   type_commande?: TypeCommandeUgc;
   nom_pack: string;
   brief_produit: string | null;
