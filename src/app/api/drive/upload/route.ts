@@ -103,21 +103,24 @@ export async function POST(request: NextRequest) {
     }
 
     let brandName = 'Client';
+    let parentFolderId: string | null = null;
     if (commande.prospect_id) {
       const { data: prospect, error: prospectError } = await auth.supabase
         .from('prospects')
-        .select('nom_marque')
+        .select('nom_marque, drive_folder_id')
         .eq('id', commande.prospect_id)
         .maybeSingle();
 
       if (prospectError) throw prospectError;
       brandName = prospect?.nom_marque || 'Client';
+      parentFolderId = prospect?.drive_folder_id || null;
     }
 
     let folderId = commande.drive_subfolder_id;
     if (!folderId) {
       const folder = await createDriveFolder(
-        'Commande_' + safeFolderPart(brandName) + '_' + safeFolderPart(commande.nom_pack)
+        'Commande_' + safeFolderPart(brandName) + '_' + safeFolderPart(commande.nom_pack),
+        parentFolderId || undefined
       );
       folderId = folder.folderId;
 
