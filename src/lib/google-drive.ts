@@ -1,17 +1,33 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 
+const DEFAULT_ROOT_FOLDER_ID = '18ztbERK7Ql20zy6dea40oour9K35Wr-w';
+
+export function isRealDriveFolderId(id: string | null | undefined): boolean {
+  return Boolean(
+    id &&
+      !id.startsWith('drv_') &&
+      !id.startsWith('file_') &&
+      !id.includes('your-google-drive')
+  );
+}
+
+export function getRootDriveFolderId(): string {
+  const envRoot = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+  if (envRoot && isRealDriveFolderId(envRoot)) {
+    return envRoot;
+  }
+  return DEFAULT_ROOT_FOLDER_ID;
+}
+
 export function isGoogleDriveConfigured(): boolean {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const key = process.env.GOOGLE_PRIVATE_KEY;
-  const rootId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
   return Boolean(
     email &&
       key &&
-      rootId &&
       !email.includes('your-gcp-project') &&
-      !key.includes('YOUR_PRIVATE_KEY_HERE') &&
-      !rootId.includes('your-google-drive-root-folder-id')
+      !key.includes('YOUR_PRIVATE_KEY_HERE')
   );
 }
 
@@ -20,7 +36,9 @@ function getDriveClient() {
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (!clientEmail || !privateKey) {
-    throw new Error('Identifiants Google Service Account manquants dans .env.local');
+    throw new Error(
+      'Variables GOOGLE_SERVICE_ACCOUNT_EMAIL et GOOGLE_PRIVATE_KEY manquantes sur ce serveur (pensez à importer .env.local dans Vercel > Settings > Environment Variables).'
+    );
   }
 
   const auth = new google.auth.JWT({
@@ -36,27 +54,43 @@ export async function createDriveFolder(
   folderName: string,
   parentFolderId?: string
 ): Promise<{ folderId: string; webViewLink: string; simulated: boolean }> {
-  const targetParent = parentFolderId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-
-  if (!isGoogleDriveConfigured()) {
-    const cleanSlug = folderName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-    const simulatedId = `drv_${cleanSlug}_${Date.now().toString(36)}`;
-    return {
-      folderId: simulatedId,
-      webViewLink: `https://drive.google.com/drive/folders/${simulatedId}`,
-      simulated: true,
-    };
-  }
+  const validParent = isRealDriveFolderId(parentFolderId)
+    ? parentFolderId!
+    : getRootDriveFolderId();
 
   const drive = getDriveClient();
+
+  // Check if a folder with the exact same name already exists inside validParent to avoid duplicates
+  try {
+    const escapedName = folderName.replace(/'/g, "\\'");
+    const existing = await drive.files.list({
+      q: `name = '${escapedName}' and '${validParent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, name, webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (existing.data.files && existing.data.files.length > 0) {
+      const found = existing.data.files[0];
+      if (found.id) {
+        return {
+          folderId: found.id,
+          webViewLink:
+            found.webViewLink ||
+            `https://drive.google.com/drive/folders/${found.id}`,
+          simulated: false,
+        };
+      }
+    }
+  } catch {
+    // Proceed to creation if list check fails
+  }
+
   const response = await drive.files.create({
     requestBody: {
       name: folderName,
       mimeType: 'application/vnd.google-apps.folder',
-      parents: targetParent ? [targetParent] : undefined,
+      parents: [validParent],
     },
     fields: 'id, name, webViewLink',
     supportsAllDrives: true,
@@ -83,17 +117,9 @@ export async function uploadFileToDrive(params: {
   folderId: string;
 }): Promise<{ fileId: string; webViewLink: string; simulated: boolean }> {
   const { fileName, mimeType, buffer, folderId } = params;
-
-  if (!isGoogleDriveConfigured()) {
-    const simulatedId = `file_${Date.now().toString(36)}_${Math.random()
-      .toString(36)
-      .slice(2, 7)}`;
-    return {
-      fileId: simulatedId,
-      webViewLink: `https://drive.google.com/file/d/${simulatedId}/view`,
-      simulated: true,
-    };
-  }
+  const targetFolderId = isRealDriveFolderId(folderId)
+    ? folderId
+    : getRootDriveFolderId();
 
   const drive = getDriveClient();
   const stream = Readable.from(buffer);
@@ -101,7 +127,7 @@ export async function uploadFileToDrive(params: {
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: [folderId],
+      parents: [targetFolderId],
     },
     media: {
       mimeType,
@@ -129,18 +155,14 @@ export async function shareDriveFolderPublicRead(folderId: string): Promise<{
   publicUrl: string;
   simulated: boolean;
 }> {
-  const publicUrl = `https://drive.google.com/drive/folders/${folderId}?usp=sharing`;
-
-  if (!isGoogleDriveConfigured()) {
-    return {
-      publicUrl,
-      simulated: true,
-    };
-  }
+  const targetId = isRealDriveFolderId(folderId)
+    ? folderId
+    : getRootDriveFolderId();
+  const publicUrl = `https://drive.google.com/drive/folders/${targetId}?usp=sharing`;
 
   const drive = getDriveClient();
   await drive.permissions.create({
-    fileId: folderId,
+    fileId: targetId,
     requestBody: {
       role: 'reader',
       type: 'anyone',
@@ -153,4 +175,3 @@ export async function shareDriveFolderPublicRead(folderId: string): Promise<{
     simulated: false,
   };
 }
-

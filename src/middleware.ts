@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { getSupabaseCredentials } from '@/lib/supabase/client';
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
@@ -13,56 +11,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
-
-  const { url, key } = getSupabaseCredentials();
-  let isAuthenticated = false;
-
+  // Fast 0ms synchronous cookie check (no blocking remote HTTP call on page reload)
   const localAuthCookie = request.cookies.get('studio_h_session')?.value;
-  if (localAuthCookie === 'authenticated') {
-    isAuthenticated = true;
-  }
+  const hasSupabaseCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'));
 
-  try {
-    const supabase = createServerClient(url, key, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(
-          cookiesToSet: {
-            name: string;
-            value: string;
-            options: CookieOptions;
-          }[]
-        ) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    });
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      isAuthenticated = true;
-    }
-  } catch {
-    // Fallback to cookie check
-  }
+  const isAuthenticated =
+    localAuthCookie === 'authenticated' || hasSupabaseCookie;
 
   if (!isAuthenticated && pathname !== '/login') {
     const loginUrl = request.nextUrl.clone();
@@ -76,7 +32,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

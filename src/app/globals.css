@@ -50,22 +50,22 @@ body {
 
 @layer components {
   .glass-card {
-    @apply rounded-2xl bg-white/95 backdrop-blur-md border border-stone-200/85 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
+    @apply rounded-2xl bg-white border border-stone-200/85 shadow-sm transition-colors duration-150 max-w-full overflow-hidden;
   }
 
   .glass-card-avocado {
-    @apply rounded-2xl bg-gradient-to-r from-white via-white to-[#FFF8B9]/35 backdrop-blur-md border border-[#568203]/25 shadow-sm transition-all duration-200 max-w-full overflow-hidden;
+    @apply rounded-2xl bg-gradient-to-r from-white via-white to-[#FFF8B9]/35 border border-[#568203]/25 shadow-sm transition-colors duration-150 max-w-full overflow-hidden;
   }
 
   .glass-input {
-    @apply w-full max-w-full rounded-xl bg-white border border-stone-200/90 px-3.5 py-2 text-[16px] sm:text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-[#568203] focus:ring-1 focus:ring-[#568203]/25 transition-all;
+    @apply w-full max-w-full rounded-xl bg-white border border-stone-200/90 px-3.5 py-2 text-[16px] sm:text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-[#568203] focus:ring-1 focus:ring-[#568203]/25 transition-colors;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#568203] hover:bg-[#466A02] text-white border border-[#568203] px-3.5 py-2 text-[13px] font-medium shadow-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#568203] hover:bg-[#466A02] text-white border border-[#568203] px-3.5 py-2 text-[13px] font-medium shadow-sm transition-colors duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-[#FFF8B9]/40 text-zinc-700 border border-stone-200 px-3.5 py-2 text-[13px] font-medium transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-[#FFF8B9]/40 text-zinc-700 border border-stone-200 px-3.5 py-2 text-[13px] font-medium transition-colors duration-150 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none shrink-0;
   }
 }

@@ -51,11 +51,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0">
+      <div
+        style={{ zIndex: 2147483630 }}
+        className="fixed bottom-4 right-4 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+      >
         {toasts.map((item) => (
           <div
             key={item.id}
-            className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-white/95 backdrop-blur-md border border-stone-200 p-3 text-zinc-900 shadow-lg transition-all duration-200"
+            className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-white border border-stone-200 p-3 text-zinc-900 shadow-xl transition-all duration-200"
           >
             <div className="mt-0.5 shrink-0">
               {item.type === 'success' && (

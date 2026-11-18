@@ -26,7 +26,11 @@ import { useToast } from './ToastContext';
 const META_MARKER = '\n<!--STUDIO_H_META:';
 const META_END = '-->';
 
-// --- Serialization helpers so all rich fields work in existing Supabase columns ---
+function cleanDriveId(id: string | null | undefined): string | null {
+  if (!id || id.startsWith('drv_') || id.startsWith('file_')) return null;
+  return id;
+}
+
 function serializeProspectNotes(prospect: Partial<Prospect>): string {
   const baseNotes = (prospect.notes_strategiques || '')
     .split(META_MARKER)[0]
@@ -44,9 +48,12 @@ function serializeProspectNotes(prospect: Partial<Prospect>): string {
 function deserializeProspect(raw: Prospect): Prospect {
   const notesRaw = raw.notes_strategiques || '';
   const idx = notesRaw.indexOf(META_MARKER);
+  const validDriveId = cleanDriveId(raw.drive_folder_id);
+
   if (idx === -1) {
     return {
       ...raw,
+      drive_folder_id: validDriveId,
       logo_url: raw.logo_url || null,
       contact_telephone: raw.contact_telephone || null,
       liens_pubs: raw.liens_pubs || [],
@@ -63,6 +70,7 @@ function deserializeProspect(raw: Prospect): Prospect {
     const meta = JSON.parse(jsonPart);
     return {
       ...raw,
+      drive_folder_id: validDriveId,
       notes_strategiques: cleanNotes,
       logo_url: raw.logo_url ?? meta.logo_url ?? null,
       contact_telephone:
@@ -81,6 +89,7 @@ function deserializeProspect(raw: Prospect): Prospect {
   } catch {
     return {
       ...raw,
+      drive_folder_id: validDriveId,
       notes_strategiques: cleanNotes,
     };
   }
@@ -98,9 +107,12 @@ function serializeCommandeBrief(cmd: Partial<CommandeUgc>): string {
 function deserializeCommande(raw: CommandeUgc): CommandeUgc {
   const briefRaw = raw.brief_produit || '';
   const idx = briefRaw.indexOf(META_MARKER);
+  const validSubfolder = cleanDriveId(raw.drive_subfolder_id);
+
   if (idx === -1) {
     return {
       ...raw,
+      drive_subfolder_id: validSubfolder,
       liens_reference: raw.liens_reference || [],
       photos_reference: raw.photos_reference || [],
     };
@@ -114,6 +126,7 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
     const meta = JSON.parse(jsonPart);
     return {
       ...raw,
+      drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
       liens_reference: raw.liens_reference?.length
         ? raw.liens_reference
@@ -125,6 +138,7 @@ function deserializeCommande(raw: CommandeUgc): CommandeUgc {
   } catch {
     return {
       ...raw,
+      drive_subfolder_id: validSubfolder,
       brief_produit: cleanBrief,
     };
   }
@@ -306,7 +320,7 @@ export function StudioDataProvider({
   children: React.ReactNode;
 }) {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isLiveSupabase] = useState(true);
   const [rlsBlocked, setRlsBlocked] = useState(false);
 
@@ -363,22 +377,15 @@ export function StudioDataProvider({
       );
       if (anyRlsErr) {
         setRlsBlocked(true);
+      } else {
+        setRlsBlocked(false);
       }
 
-      // Merge remote Supabase rows with any local unsynced rows
-      if (!pErr && pData) {
-        const remoteProspects = (pData as Prospect[]).map(deserializeProspect);
-        if (remoteProspects.length > 0) {
-          setProspects(remoteProspects);
-        }
+      if (!pErr && pData && pData.length > 0) {
+        setProspects((pData as Prospect[]).map(deserializeProspect));
       }
-      if (!cErr && cData) {
-        const remoteCommandes = (cData as CommandeUgc[]).map(
-          deserializeCommande
-        );
-        if (remoteCommandes.length > 0) {
-          setCommandes(remoteCommandes);
-        }
+      if (!cErr && cData && cData.length > 0) {
+        setCommandes((cData as CommandeUgc[]).map(deserializeCommande));
       }
       if (!mErr && mData && mData.length > 0) {
         setMedias(mData as MediaCreation[]);
@@ -389,13 +396,8 @@ export function StudioDataProvider({
       if (!fErr && fData && fData.length > 0) {
         setFinances(fData as Finance[]);
       }
-      if (!ftErr && ftData) {
-        const remoteFocus = (ftData as FocusTache[]).map(
-          deserializeFocusTache
-        );
-        if (remoteFocus.length > 0) {
-          setFocusTaches(remoteFocus);
-        }
+      if (!ftErr && ftData && ftData.length > 0) {
+        setFocusTaches((ftData as FocusTache[]).map(deserializeFocusTache));
       }
     } catch {
       // Keep local cache on network error
@@ -405,6 +407,7 @@ export function StudioDataProvider({
   }, []);
 
   useEffect(() => {
+    // 1. Instant 0ms synchronous hydration from localStorage (no skeleton flash)
     try {
       const lp = localStorage.getItem(LIVE_STORAGE.prospects);
       const lc = localStorage.getItem(LIVE_STORAGE.commandes);
@@ -413,8 +416,14 @@ export function StudioDataProvider({
       const lf = localStorage.getItem(LIVE_STORAGE.finances);
       const lft = localStorage.getItem(LIVE_STORAGE.focus);
 
-      if (lp) setProspects((JSON.parse(lp) as Prospect[]).map(deserializeProspect));
-      if (lc) setCommandes((JSON.parse(lc) as CommandeUgc[]).map(deserializeCommande));
+      if (lp)
+        setProspects(
+          (JSON.parse(lp) as Prospect[]).map(deserializeProspect)
+        );
+      if (lc)
+        setCommandes(
+          (JSON.parse(lc) as CommandeUgc[]).map(deserializeCommande)
+        );
       if (lm) setMedias(JSON.parse(lm));
       if (lpr) setPrompts(JSON.parse(lpr));
       if (lf) setFinances(JSON.parse(lf));
@@ -429,29 +438,27 @@ export function StudioDataProvider({
 
       const savedSubfolders = localStorage.getItem(LIVE_STORAGE.subfolders);
       if (savedSubfolders) {
-        setClientSubfolders(JSON.parse(savedSubfolders));
+        const parsedSubs = JSON.parse(savedSubfolders) as Record<
+          string,
+          DriveSubfolder[]
+        >;
+        const cleanedSubs: Record<string, DriveSubfolder[]> = {};
+        for (const [k, list] of Object.entries(parsedSubs)) {
+          cleanedSubs[k] = (list || []).filter(
+            (s) => s.id && !s.id.startsWith('drv_')
+          );
+        }
+        setClientSubfolders(cleanedSubs);
       }
     } catch {
       // ignore
     }
 
+    // 2. Non-blocking background sync with Supabase
     refreshAllData();
-
-    // Auto-refresh when returning to the window/tab (Phone <-> PC sync)
-    const onFocus = () => {
-      refreshAllData();
-    };
-    window.addEventListener('focus', onFocus);
-    const interval = setInterval(refreshAllData, 15000);
-
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      clearInterval(interval);
-    };
   }, [refreshAllData]);
 
   useEffect(() => {
-    if (isLoading) return;
     try {
       localStorage.setItem(LIVE_STORAGE.prospects, JSON.stringify(prospects));
       localStorage.setItem(LIVE_STORAGE.commandes, JSON.stringify(commandes));
@@ -467,7 +474,6 @@ export function StudioDataProvider({
       // ignore
     }
   }, [
-    isLoading,
     prospects,
     commandes,
     medias,
@@ -492,7 +498,8 @@ export function StudioDataProvider({
     async (prospectId: string): Promise<string | null> => {
       const target = prospects.find((p) => p.id === prospectId);
       if (!target) return null;
-      if (target.drive_folder_id) return target.drive_folder_id;
+      const existingRealId = cleanDriveId(target.drive_folder_id);
+      if (existingRealId) return existingRealId;
 
       try {
         const res = await fetch('/api/drive/create-folder', {
@@ -525,7 +532,7 @@ export function StudioDataProvider({
 
         toast({
           title: 'Dossier Google Drive créé',
-          description: `Dossier Client_${target.nom_marque.replace(/\s+/g, '_')} créé sur votre Google Drive.`,
+          description: `Dossier Client_${target.nom_marque.replace(/\s+/g, '_')} créé dans "Studio H - Clients" sur votre Google Drive.`,
           type: 'success',
         });
 
@@ -554,7 +561,7 @@ export function StudioDataProvider({
       if (!target || !subfolderName.trim()) return null;
 
       try {
-        let parentId = target.drive_folder_id;
+        let parentId = cleanDriveId(target.drive_folder_id);
         if (!parentId) {
           parentId = await createProspectDriveFolder(prospectId);
         }
@@ -682,19 +689,29 @@ export function StudioDataProvider({
           .from('prospects')
           .update({ statut, date_dernier_contact: nowIso })
           .eq('id', id);
-        if (error && (error.code === '42501' || error.message?.includes('row-level'))) {
+        if (
+          error &&
+          (error.code === '42501' || error.message?.includes('row-level'))
+        ) {
           setRlsBlocked(true);
         }
       } catch {
         // ignore
       }
 
-      if (statut === 'Signé' && existing && !existing.drive_folder_id) {
+      if (
+        statut === 'Signé' &&
+        existing &&
+        !cleanDriveId(existing.drive_folder_id)
+      ) {
         const folderId = await createProspectDriveFolder(id);
         return { folderCreated: Boolean(folderId), folderId };
       }
 
-      return { folderCreated: false, folderId: existing?.drive_folder_id };
+      return {
+        folderCreated: false,
+        folderId: cleanDriveId(existing?.drive_folder_id),
+      };
     },
     [prospects, createProspectDriveFolder]
   );
@@ -731,7 +748,10 @@ export function StudioDataProvider({
               date_dernier_contact: merged.date_dernier_contact,
             })
             .eq('id', id);
-          if (error && (error.code === '42501' || error.message?.includes('row-level'))) {
+          if (
+            error &&
+            (error.code === '42501' || error.message?.includes('row-level'))
+          ) {
             setRlsBlocked(true);
           }
         } catch {
@@ -1049,7 +1069,7 @@ export function StudioDataProvider({
     }
   }, []);
 
-  // --- FOCUS TACHES & IDEES (10 TASKS MAX + RICH IDEAS WITH TITLE, DESCRIPTION, LINKS, PHOTOS) ---
+  // --- FOCUS TACHES & IDEES ---
   const addFocusTache = useCallback(
     async (
       type: 'tache_jour' | 'boite_idee',
