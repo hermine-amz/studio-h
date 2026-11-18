@@ -31,6 +31,11 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Report dependency vulnerabilities
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node -e "const a=require('/tmp/npm-audit.json'); console.log('Vulnerability totals:', JSON.stringify(a.metadata?.vulnerabilities ?? {})); for (const [name, v] of Object.entries(a.vulnerabilities ?? {})) console.log(JSON.stringify({name, severity:v.severity, direct:v.isDirect, range:v.range, fixAvailable:v.fixAvailable, via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,url:x.url,range:x.range})}));"
+
       - name: TypeScript validation
         run: npx tsc --noEmit
 
