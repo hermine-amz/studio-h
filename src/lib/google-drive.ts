@@ -161,14 +161,24 @@ export async function shareDriveFolderPublicRead(folderId: string): Promise<{
   const publicUrl = `https://drive.google.com/drive/folders/${targetId}?usp=sharing`;
 
   const drive = getDriveClient();
-  await drive.permissions.create({
+  const existing = await drive.permissions.list({
     fileId: targetId,
-    requestBody: {
-      role: 'reader',
-      type: 'anyone',
-    },
+    fields: 'permissions(id,type,role)',
     supportsAllDrives: true,
   });
+  const alreadyPublic = existing.data.permissions?.some(
+    (permission) => permission.type === 'anyone' && permission.role === 'reader'
+  );
+  if (!alreadyPublic) {
+    await drive.permissions.create({
+      fileId: targetId,
+      requestBody: {
+        role: 'reader',
+        type: 'anyone',
+      },
+      supportsAllDrives: true,
+    });
+  }
 
   return {
     publicUrl,
