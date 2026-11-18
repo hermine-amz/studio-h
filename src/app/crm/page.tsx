@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   Plus,
@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -30,6 +31,7 @@ import {
   daysSince,
   normalizeCountryCode,
 } from '@/lib/currency';
+import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -77,6 +79,7 @@ export default function CrmKanbanPage() {
   // Quick + Advanced Prospect Form State
   const [nomMarque, setNomMarque] = useState('');
   const [pays, setPays] = useState('FR');
+  const [logoUrl, setLogoUrl] = useState<string>('');
   const [contactNom, setContactNom] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactTelephone, setContactTelephone] = useState('');
@@ -91,6 +94,24 @@ export default function CrmKanbanPage() {
   const [instagramUrl, setInstagramUrl] = useState('');
   const [tiktokUrl, setTiktokUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
+
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleLogoFileChange = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(files[0], 260, 0.85);
+      setLogoUrl(dataUrl);
+      toast({
+        title: 'Logo client chargé',
+      });
+    } catch {
+      toast({
+        title: 'Format de logo invalide',
+        type: 'error',
+      });
+    }
+  };
 
   const filteredProspects = useMemo(() => {
     return prospects.filter((p) => {
@@ -208,6 +229,7 @@ export default function CrmKanbanPage() {
     await addProspect({
       nom_marque: nomMarque.trim(),
       pays,
+      logo_url: logoUrl.trim() || null,
       contact_nom: contactNom.trim() || null,
       contact_email: contactEmail.trim() || null,
       contact_telephone: contactTelephone.trim() || null,
@@ -233,6 +255,7 @@ export default function CrmKanbanPage() {
     });
 
     setNomMarque('');
+    setLogoUrl('');
     setContactNom('');
     setContactEmail('');
     setContactTelephone('');
@@ -395,13 +418,25 @@ export default function CrmKanbanPage() {
                         onDragStart={(e) => handleDragStart(e, prospect.id)}
                         className="group rounded-xl bg-white hover:bg-stone-50/60 border border-stone-200/90 hover:border-[#568203]/45 p-3.5 shadow-sm transition-all cursor-grab active:cursor-grabbing space-y-2.5"
                       >
-                        {/* Top row: Brand + Country Code */}
+                        {/* Top row: Logo + Brand + Country Code */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
                             <GripVertical
-                              className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5"
+                              className="h-4 w-4 text-zinc-400 shrink-0"
                               strokeWidth={1.5}
                             />
+                            {prospect.logo_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={prospect.logo_url}
+                                alt={prospect.nom_marque}
+                                className="h-7 w-7 rounded-lg object-cover border border-stone-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="h-7 w-7 rounded-lg bg-[#FFF8B9]/65 border border-[#568203]/25 flex items-center justify-center text-xs font-bold text-[#568203] shrink-0">
+                                {prospect.nom_marque.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                             <Link
                               href={`/crm/${prospect.id}?tab=infos`}
                               className="text-[13.5px] font-semibold text-zinc-900 hover:text-[#568203] hover:underline leading-snug truncate"
@@ -588,7 +623,7 @@ export default function CrmKanbanPage() {
         })}
       </div>
 
-      {/* Modal: Quick Add Prospect + Optional Links */}
+      {/* Modal: Quick Add Prospect + Optional Logo & Links */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
           <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
@@ -600,10 +635,10 @@ export default function CrmKanbanPage() {
                 />
                 <div>
                   <h2 className="text-base font-semibold text-zinc-900">
-                    Création Rapide d’un Prospect
+                    Création Rapide d’un Prospect / Client
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Vous pourrez aussi compléter tous les liens (Pubs FB, Produits, Réseaux) en cliquant sur son nom
+                    Logo optionnel, coordonnées et liens Pubs Facebook / Produits / Réseaux
                   </p>
                 </div>
               </div>
@@ -616,36 +651,75 @@ export default function CrmKanbanPage() {
             </div>
 
             <form onSubmit={handleCreateProspect} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                    Nom de la marque *
-                  </label>
+              {/* Optional Logo Upload + Brand Name + Country */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 pb-2">
+                <div className="flex items-center gap-3 shrink-0">
                   <input
-                    type="text"
-                    required
-                    value={nomMarque}
-                    onChange={(e) => setNomMarque(e.target.value)}
-                    placeholder="Ex: Maison Lumière Paris"
-                    className="glass-input"
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleLogoFileChange(e.target.files)}
                   />
+                  {logoUrl ? (
+                    <div className="relative h-14 w-14 rounded-xl overflow-hidden border border-stone-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={logoUrl}
+                        alt="Logo client"
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl('')}
+                        className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/70 p-0.5 text-white"
+                      >
+                        <X className="h-3 w-3" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="h-14 w-14 rounded-xl border border-dashed border-stone-300 bg-stone-50 hover:border-[#568203] flex flex-col items-center justify-center text-[10px] text-zinc-500 gap-0.5"
+                    >
+                      <ImageIcon className="h-4 w-4 text-zinc-400" strokeWidth={1.5} />
+                      <span>Logo</span>
+                    </button>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                    Code Pays
-                  </label>
-                  <select
-                    value={pays}
-                    onChange={(e) => setPays(e.target.value)}
-                    className="glass-input"
-                  >
-                    {EUROPEAN_COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1 w-full">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                      Nom de la marque *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={nomMarque}
+                      onChange={(e) => setNomMarque(e.target.value)}
+                      placeholder="Ex: Maison Lumière Paris"
+                      className="glass-input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                      Code Pays
+                    </label>
+                    <select
+                      value={pays}
+                      onChange={(e) => setPays(e.target.value)}
+                      className="glass-input"
+                    >
+                      {EUROPEAN_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 

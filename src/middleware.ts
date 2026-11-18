@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { getSupabaseCredentials } from '@/lib/supabase/client';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public assets and API routes
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
@@ -19,61 +19,49 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const isConfigured = Boolean(
-    url &&
-      key &&
-      url.startsWith('http') &&
-      !url.includes('your-project-id') &&
-      !key.includes('your-supabase-anon-key')
-  );
-
+  const { url, key } = getSupabaseCredentials();
   let isAuthenticated = false;
 
-  // Check local session cookie (used when Supabase is in local/demo mode or alongside Supabase)
   const localAuthCookie = request.cookies.get('studio_h_session')?.value;
   if (localAuthCookie === 'authenticated') {
     isAuthenticated = true;
   }
 
-  if (isConfigured && url && key) {
-    try {
-      const supabase = createServerClient(url, key, {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(
-            cookiesToSet: {
-              name: string;
-              value: string;
-              options: CookieOptions;
-            }[]
-          ) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            );
-            response = NextResponse.next({
-              request,
-            });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
-            );
-          },
+  try {
+    const supabase = createServerClient(url, key, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
         },
-      });
+        setAll(
+          cookiesToSet: {
+            name: string;
+            value: string;
+            options: CookieOptions;
+          }[]
+        ) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          response = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    });
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (user) {
-        isAuthenticated = true;
-      }
-    } catch {
-      // Fallback to cookie check if network error
+    if (user) {
+      isAuthenticated = true;
     }
+  } catch {
+    // Fallback to cookie check
   }
 
   if (!isAuthenticated && pathname !== '/login') {

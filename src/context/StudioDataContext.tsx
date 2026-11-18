@@ -23,9 +23,186 @@ import type {
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from './ToastContext';
 
+const META_MARKER = '\n<!--STUDIO_H_META:';
+const META_END = '-->';
+
+// --- Serialization helpers so all rich fields work in existing Supabase columns ---
+function serializeProspectNotes(prospect: Partial<Prospect>): string {
+  const baseNotes = (prospect.notes_strategiques || '')
+    .split(META_MARKER)[0]
+    .trim();
+  const meta = {
+    logo_url: prospect.logo_url || null,
+    contact_telephone: prospect.contact_telephone || null,
+    liens_pubs: prospect.liens_pubs || [],
+    liens_produits: prospect.liens_produits || [],
+    liens_reseaux: prospect.liens_reseaux || {},
+  };
+  return `${baseNotes}${META_MARKER}${JSON.stringify(meta)}${META_END}`;
+}
+
+function deserializeProspect(raw: Prospect): Prospect {
+  const notesRaw = raw.notes_strategiques || '';
+  const idx = notesRaw.indexOf(META_MARKER);
+  if (idx === -1) {
+    return {
+      ...raw,
+      logo_url: raw.logo_url || null,
+      contact_telephone: raw.contact_telephone || null,
+      liens_pubs: raw.liens_pubs || [],
+      liens_produits: raw.liens_produits || [],
+      liens_reseaux: raw.liens_reseaux || {},
+    };
+  }
+  const cleanNotes = notesRaw.slice(0, idx).trim();
+  const jsonPart = notesRaw
+    .slice(idx + META_MARKER.length)
+    .replace(/-->$/, '')
+    .trim();
+  try {
+    const meta = JSON.parse(jsonPart);
+    return {
+      ...raw,
+      notes_strategiques: cleanNotes,
+      logo_url: raw.logo_url ?? meta.logo_url ?? null,
+      contact_telephone:
+        raw.contact_telephone ?? meta.contact_telephone ?? null,
+      liens_pubs: raw.liens_pubs?.length
+        ? raw.liens_pubs
+        : meta.liens_pubs || [],
+      liens_produits: raw.liens_produits?.length
+        ? raw.liens_produits
+        : meta.liens_produits || [],
+      liens_reseaux:
+        raw.liens_reseaux && Object.keys(raw.liens_reseaux).length > 0
+          ? raw.liens_reseaux
+          : meta.liens_reseaux || {},
+    };
+  } catch {
+    return {
+      ...raw,
+      notes_strategiques: cleanNotes,
+    };
+  }
+}
+
+function serializeCommandeBrief(cmd: Partial<CommandeUgc>): string {
+  const baseBrief = (cmd.brief_produit || '').split(META_MARKER)[0].trim();
+  const meta = {
+    liens_reference: cmd.liens_reference || [],
+    photos_reference: cmd.photos_reference || [],
+  };
+  return `${baseBrief}${META_MARKER}${JSON.stringify(meta)}${META_END}`;
+}
+
+function deserializeCommande(raw: CommandeUgc): CommandeUgc {
+  const briefRaw = raw.brief_produit || '';
+  const idx = briefRaw.indexOf(META_MARKER);
+  if (idx === -1) {
+    return {
+      ...raw,
+      liens_reference: raw.liens_reference || [],
+      photos_reference: raw.photos_reference || [],
+    };
+  }
+  const cleanBrief = briefRaw.slice(0, idx).trim();
+  const jsonPart = briefRaw
+    .slice(idx + META_MARKER.length)
+    .replace(/-->$/, '')
+    .trim();
+  try {
+    const meta = JSON.parse(jsonPart);
+    return {
+      ...raw,
+      brief_produit: cleanBrief,
+      liens_reference: raw.liens_reference?.length
+        ? raw.liens_reference
+        : meta.liens_reference || [],
+      photos_reference: raw.photos_reference?.length
+        ? raw.photos_reference
+        : meta.photos_reference || [],
+    };
+  } catch {
+    return {
+      ...raw,
+      brief_produit: cleanBrief,
+    };
+  }
+}
+
+function serializeFocusTacheContenu(task: Partial<FocusTache>): string {
+  const cleanText = (task.titre || task.contenu || '')
+    .split(META_MARKER)[0]
+    .replace(/^\[(Critique|Haute|Normale)\]\s*/i, '')
+    .trim();
+  const meta = {
+    titre: cleanText,
+    description: task.description || '',
+    urgence: task.urgence || 'Normale',
+    liens: task.liens || [],
+    photos: task.photos || [],
+  };
+  return `${cleanText}${META_MARKER}${JSON.stringify(meta)}${META_END}`;
+}
+
+function deserializeFocusTache(raw: FocusTache): FocusTache {
+  const contenuRaw = raw.contenu || '';
+  const idx = contenuRaw.indexOf(META_MARKER);
+  if (idx !== -1) {
+    const cleanText = contenuRaw.slice(0, idx).trim();
+    const jsonPart = contenuRaw
+      .slice(idx + META_MARKER.length)
+      .replace(/-->$/, '')
+      .trim();
+    try {
+      const meta = JSON.parse(jsonPart);
+      return {
+        ...raw,
+        contenu: meta.titre || cleanText,
+        titre: meta.titre || cleanText,
+        description: meta.description || '',
+        urgence: meta.urgence || raw.urgence || 'Normale',
+        liens: meta.liens || [],
+        photos: meta.photos || [],
+      };
+    } catch {
+      return {
+        ...raw,
+        contenu: cleanText,
+        titre: cleanText,
+        urgence: raw.urgence || 'Normale',
+      };
+    }
+  }
+
+  const match = contenuRaw.match(/^\[(Critique|Haute|Normale)\]\s*(.*)$/i);
+  if (match) {
+    const urg = (match[1].charAt(0).toUpperCase() +
+      match[1].slice(1).toLowerCase()) as UrgenceNiveau;
+    return {
+      ...raw,
+      urgence: urg,
+      contenu: match[2],
+      titre: match[2],
+      description: raw.description || '',
+      liens: raw.liens || [],
+      photos: raw.photos || [],
+    };
+  }
+  return {
+    ...raw,
+    titre: raw.titre || raw.contenu,
+    description: raw.description || '',
+    urgence: raw.urgence || 'Normale',
+    liens: raw.liens || [],
+    photos: raw.photos || [],
+  };
+}
+
 interface StudioDataContextValue {
   isLoading: boolean;
   isLiveSupabase: boolean;
+  rlsBlocked: boolean;
   prospects: Prospect[];
   commandes: CommandeUgc[];
   medias: MediaCreation[];
@@ -84,12 +261,18 @@ interface StudioDataContextValue {
   addFinance: (data: Omit<Finance, 'id' | 'created_at'>) => Promise<Finance>;
   deleteFinance: (id: string) => Promise<void>;
 
-  // Focus Taches & Idees (10 tasks max + urgency level)
+  // Focus Taches & Idees
   addFocusTache: (
     type: 'tache_jour' | 'boite_idee',
     contenu: string,
-    urgence?: UrgenceNiveau
+    urgence?: UrgenceNiveau,
+    extra?: {
+      description?: string;
+      liens?: string[];
+      photos?: string[];
+    }
   ) => Promise<{ ok: boolean; reason?: string }>;
+  updateFocusTache: (id: string, patch: Partial<FocusTache>) => Promise<void>;
   toggleFocusTache: (id: string, est_termine: boolean) => Promise<void>;
   updateFocusTacheUrgence: (
     id: string,
@@ -117,30 +300,6 @@ const LIVE_STORAGE = {
   subfolders: 'studio_h_subfolders_v2',
 };
 
-function parseUrgenceFromTask(task: FocusTache): FocusTache {
-  if (task.urgence) return task;
-  const match = task.contenu.match(/^\[(Critique|Haute|Normale)\]\s*(.*)$/i);
-  if (match) {
-    const urg = (match[1].charAt(0).toUpperCase() +
-      match[1].slice(1).toLowerCase()) as UrgenceNiveau;
-    return {
-      ...task,
-      urgence: urg,
-      contenu: match[2],
-    };
-  }
-  return {
-    ...task,
-    urgence: 'Normale',
-  };
-}
-
-function encodeTaskContent(contenu: string, urgence?: UrgenceNiveau): string {
-  const clean = contenu.replace(/^\[(Critique|Haute|Normale)\]\s*/i, '').trim();
-  if (!urgence) return clean;
-  return `[${urgence}] ${clean}`;
-}
-
 export function StudioDataProvider({
   children,
 }: {
@@ -149,6 +308,7 @@ export function StudioDataProvider({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isLiveSupabase] = useState(true);
+  const [rlsBlocked, setRlsBlocked] = useState(false);
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [commandes, setCommandes] = useState<CommandeUgc[]>([]);
@@ -162,30 +322,6 @@ export function StudioDataProvider({
   >({});
 
   const refreshAllData = useCallback(async () => {
-    setIsLoading(true);
-    // 1. Load local cache first so user data is never lost
-    try {
-      const lp = localStorage.getItem(LIVE_STORAGE.prospects);
-      const lc = localStorage.getItem(LIVE_STORAGE.commandes);
-      const lm = localStorage.getItem(LIVE_STORAGE.medias);
-      const lpr = localStorage.getItem(LIVE_STORAGE.prompts);
-      const lf = localStorage.getItem(LIVE_STORAGE.finances);
-      const lft = localStorage.getItem(LIVE_STORAGE.focus);
-
-      if (lp) setProspects(JSON.parse(lp));
-      if (lc) setCommandes(JSON.parse(lc));
-      if (lm) setMedias(JSON.parse(lm));
-      if (lpr) setPrompts(JSON.parse(lpr));
-      if (lf) setFinances(JSON.parse(lf));
-      if (lft) {
-        const parsed = JSON.parse(lft) as FocusTache[];
-        setFocusTaches(parsed.map(parseUrgenceFromTask));
-      }
-    } catch {
-      // ignore
-    }
-
-    // 2. Sync with Supabase if permissions are open
     try {
       const supabase = createClient();
       const [
@@ -222,19 +358,47 @@ export function StudioDataProvider({
           .order('created_at', { ascending: false }),
       ]);
 
-      if (!pErr && pData && pData.length > 0) setProspects(pData as Prospect[]);
-      if (!cErr && cData && cData.length > 0)
-        setCommandes(cData as CommandeUgc[]);
-      if (!mErr && mData && mData.length > 0)
+      const anyRlsErr = [pErr, cErr, mErr, prErr, fErr, ftErr].some(
+        (e) => e && (e.code === '42501' || e.message?.includes('row-level'))
+      );
+      if (anyRlsErr) {
+        setRlsBlocked(true);
+      }
+
+      // Merge remote Supabase rows with any local unsynced rows
+      if (!pErr && pData) {
+        const remoteProspects = (pData as Prospect[]).map(deserializeProspect);
+        if (remoteProspects.length > 0) {
+          setProspects(remoteProspects);
+        }
+      }
+      if (!cErr && cData) {
+        const remoteCommandes = (cData as CommandeUgc[]).map(
+          deserializeCommande
+        );
+        if (remoteCommandes.length > 0) {
+          setCommandes(remoteCommandes);
+        }
+      }
+      if (!mErr && mData && mData.length > 0) {
         setMedias(mData as MediaCreation[]);
-      if (!prErr && prData && prData.length > 0)
+      }
+      if (!prErr && prData && prData.length > 0) {
         setPrompts(prData as PromptScript[]);
-      if (!fErr && fData && fData.length > 0) setFinances(fData as Finance[]);
-      if (!ftErr && ftData && ftData.length > 0) {
-        setFocusTaches((ftData as FocusTache[]).map(parseUrgenceFromTask));
+      }
+      if (!fErr && fData && fData.length > 0) {
+        setFinances(fData as Finance[]);
+      }
+      if (!ftErr && ftData) {
+        const remoteFocus = (ftData as FocusTache[]).map(
+          deserializeFocusTache
+        );
+        if (remoteFocus.length > 0) {
+          setFocusTaches(remoteFocus);
+        }
       }
     } catch {
-      // Keep local state if Supabase is unreachable or RLS blocked
+      // Keep local cache on network error
     } finally {
       setIsLoading(false);
     }
@@ -242,15 +406,23 @@ export function StudioDataProvider({
 
   useEffect(() => {
     try {
-      [
-        'studio_h_prospects_v1',
-        'studio_h_commandes_v1',
-        'studio_h_medias_v1',
-        'studio_h_prompts_v1',
-        'studio_h_finances_v1',
-        'studio_h_focus_v1',
-        'studio_h_subfolders_v1',
-      ].forEach((k) => localStorage.removeItem(k));
+      const lp = localStorage.getItem(LIVE_STORAGE.prospects);
+      const lc = localStorage.getItem(LIVE_STORAGE.commandes);
+      const lm = localStorage.getItem(LIVE_STORAGE.medias);
+      const lpr = localStorage.getItem(LIVE_STORAGE.prompts);
+      const lf = localStorage.getItem(LIVE_STORAGE.finances);
+      const lft = localStorage.getItem(LIVE_STORAGE.focus);
+
+      if (lp) setProspects((JSON.parse(lp) as Prospect[]).map(deserializeProspect));
+      if (lc) setCommandes((JSON.parse(lc) as CommandeUgc[]).map(deserializeCommande));
+      if (lm) setMedias(JSON.parse(lm));
+      if (lpr) setPrompts(JSON.parse(lpr));
+      if (lf) setFinances(JSON.parse(lf));
+      if (lft) {
+        setFocusTaches(
+          (JSON.parse(lft) as FocusTache[]).map(deserializeFocusTache)
+        );
+      }
 
       const savedGoal = localStorage.getItem(LIVE_STORAGE.goal);
       if (savedGoal) setMonthlyGoalState(Number(savedGoal) || 3000);
@@ -264,9 +436,20 @@ export function StudioDataProvider({
     }
 
     refreshAllData();
+
+    // Auto-refresh when returning to the window/tab (Phone <-> PC sync)
+    const onFocus = () => {
+      refreshAllData();
+    };
+    window.addEventListener('focus', onFocus);
+    const interval = setInterval(refreshAllData, 15000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
   }, [refreshAllData]);
 
-  // Persist live state to localStorage on every change
   useEffect(() => {
     if (isLoading) return;
     try {
@@ -438,6 +621,7 @@ export function StudioDataProvider({
 
       try {
         const supabase = createClient();
+        const encodedNotes = serializeProspectNotes(data);
         const { data: inserted, error } = await supabase
           .from('prospects')
           .insert({
@@ -449,13 +633,17 @@ export function StudioDataProvider({
             statut: data.statut,
             valeur_estimee_eur: data.valeur_estimee_eur,
             drive_folder_id: data.drive_folder_id,
-            notes_strategiques: data.notes_strategiques,
+            notes_strategiques: encodedNotes,
           })
           .select('*')
           .single();
 
-        if (!error && inserted) {
-          const real = inserted as Prospect;
+        if (error) {
+          if (error.code === '42501' || error.message?.includes('row-level')) {
+            setRlsBlocked(true);
+          }
+        } else if (inserted) {
+          const real = deserializeProspect(inserted as Prospect);
           setProspects((prev) =>
             prev.map((p) => (p.id === optimistic.id ? real : p))
           );
@@ -490,10 +678,13 @@ export function StudioDataProvider({
 
       try {
         const supabase = createClient();
-        await supabase
+        const { error } = await supabase
           .from('prospects')
           .update({ statut, date_dernier_contact: nowIso })
           .eq('id', id);
+        if (error && (error.code === '42501' || error.message?.includes('row-level'))) {
+          setRlsBlocked(true);
+        }
       } catch {
         // ignore
       }
@@ -510,15 +701,42 @@ export function StudioDataProvider({
 
   const updateProspect = useCallback(
     async (id: string, patch: Partial<Prospect>) => {
+      let merged: Prospect | undefined;
       setProspects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+        prev.map((p) => {
+          if (p.id === id) {
+            merged = { ...p, ...patch };
+            return merged;
+          }
+          return p;
+        })
       );
 
-      try {
-        const supabase = createClient();
-        await supabase.from('prospects').update(patch).eq('id', id);
-      } catch {
-        // ignore
+      if (merged) {
+        try {
+          const supabase = createClient();
+          const encodedNotes = serializeProspectNotes(merged);
+          const { error } = await supabase
+            .from('prospects')
+            .update({
+              nom_marque: merged.nom_marque,
+              pays: merged.pays,
+              contact_nom: merged.contact_nom,
+              contact_email: merged.contact_email,
+              lien_boutique: merged.lien_boutique,
+              statut: merged.statut,
+              valeur_estimee_eur: merged.valeur_estimee_eur,
+              drive_folder_id: merged.drive_folder_id,
+              notes_strategiques: encodedNotes,
+              date_dernier_contact: merged.date_dernier_contact,
+            })
+            .eq('id', id);
+          if (error && (error.code === '42501' || error.message?.includes('row-level'))) {
+            setRlsBlocked(true);
+          }
+        } catch {
+          // ignore
+        }
       }
     },
     []
@@ -551,12 +769,13 @@ export function StudioDataProvider({
 
       try {
         const supabase = createClient();
+        const encodedBrief = serializeCommandeBrief(data);
         const { data: inserted, error } = await supabase
           .from('commandes_ugc')
           .insert({
             prospect_id: data.prospect_id,
             nom_pack: data.nom_pack,
-            brief_produit: data.brief_produit,
+            brief_produit: encodedBrief,
             statut_production: data.statut_production,
             montant_eur: data.montant_eur,
             statut_paiement: data.statut_paiement,
@@ -568,8 +787,12 @@ export function StudioDataProvider({
           .select('*')
           .single();
 
-        if (!error && inserted) {
-          const real = inserted as CommandeUgc;
+        if (error) {
+          if (error.code === '42501' || error.message?.includes('row-level')) {
+            setRlsBlocked(true);
+          }
+        } else if (inserted) {
+          const real = deserializeCommande(inserted as CommandeUgc);
           setCommandes((prev) =>
             prev.map((c) => (c.id === optimistic.id ? real : c))
           );
@@ -624,15 +847,38 @@ export function StudioDataProvider({
 
   const updateCommande = useCallback(
     async (id: string, patch: Partial<CommandeUgc>) => {
+      let merged: CommandeUgc | undefined;
       setCommandes((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, ...patch } : c))
+        prev.map((c) => {
+          if (c.id === id) {
+            merged = { ...c, ...patch };
+            return merged;
+          }
+          return c;
+        })
       );
 
-      try {
-        const supabase = createClient();
-        await supabase.from('commandes_ugc').update(patch).eq('id', id);
-      } catch {
-        // ignore
+      if (merged) {
+        try {
+          const supabase = createClient();
+          const encodedBrief = serializeCommandeBrief(merged);
+          await supabase
+            .from('commandes_ugc')
+            .update({
+              nom_pack: merged.nom_pack,
+              brief_produit: encodedBrief,
+              statut_production: merged.statut_production,
+              montant_eur: merged.montant_eur,
+              statut_paiement: merged.statut_paiement,
+              nombre_creations: merged.nombre_creations,
+              drive_subfolder_id: merged.drive_subfolder_id,
+              lien_livraison_public: merged.lien_livraison_public,
+              date_limite: merged.date_limite,
+            })
+            .eq('id', id);
+        } catch {
+          // ignore
+        }
       }
     },
     []
@@ -706,7 +952,11 @@ export function StudioDataProvider({
           .select('*')
           .single();
 
-        if (!error && inserted) {
+        if (error) {
+          if (error.code === '42501' || error.message?.includes('row-level')) {
+            setRlsBlocked(true);
+          }
+        } else if (inserted) {
           const real = inserted as PromptScript;
           setPrompts((prev) =>
             prev.map((p) => (p.id === optimistic.id ? real : p))
@@ -768,7 +1018,11 @@ export function StudioDataProvider({
           .select('*')
           .single();
 
-        if (!error && inserted) {
+        if (error) {
+          if (error.code === '42501' || error.message?.includes('row-level')) {
+            setRlsBlocked(true);
+          }
+        } else if (inserted) {
           const real = inserted as Finance;
           setFinances((prev) =>
             prev.map((f) => (f.id === optimistic.id ? real : f))
@@ -795,12 +1049,17 @@ export function StudioDataProvider({
     }
   }, []);
 
-  // --- FOCUS TACHES & IDEES (MAX 10 ACTIVE TASKS + URGENCY LEVEL) ---
+  // --- FOCUS TACHES & IDEES (10 TASKS MAX + RICH IDEAS WITH TITLE, DESCRIPTION, LINKS, PHOTOS) ---
   const addFocusTache = useCallback(
     async (
       type: 'tache_jour' | 'boite_idee',
       contenu: string,
-      urgence: UrgenceNiveau = 'Normale'
+      urgence: UrgenceNiveau = 'Normale',
+      extra?: {
+        description?: string;
+        liens?: string[];
+        photos?: string[];
+      }
     ): Promise<{ ok: boolean; reason?: string }> => {
       if (type === 'tache_jour') {
         const activeDailyCount = focusTaches.filter(
@@ -815,26 +1074,25 @@ export function StudioDataProvider({
         }
       }
 
-      const cleanText = contenu.trim();
+      const cleanTitle = contenu.trim();
       const optimistic: FocusTache = {
         id: crypto.randomUUID(),
         type,
-        contenu: cleanText,
+        contenu: cleanTitle,
+        titre: cleanTitle,
+        description: extra?.description?.trim() || '',
+        liens: extra?.liens || [],
+        photos: extra?.photos || [],
         urgence: type === 'tache_jour' ? urgence : 'Normale',
         est_termine: false,
         created_at: new Date().toISOString(),
       };
 
-      // Instant Optimistic UI update
       setFocusTaches((prev) => [optimistic, ...prev]);
 
-      // Background sync to Supabase
       try {
         const supabase = createClient();
-        const encodedContenu =
-          type === 'tache_jour'
-            ? encodeTaskContent(cleanText, urgence)
-            : cleanText;
+        const encodedContenu = serializeFocusTacheContenu(optimistic);
 
         const { data: inserted, error } = await supabase
           .from('focus_taches')
@@ -846,8 +1104,12 @@ export function StudioDataProvider({
           .select('*')
           .single();
 
-        if (!error && inserted) {
-          const parsed = parseUrgenceFromTask(inserted as FocusTache);
+        if (error) {
+          if (error.code === '42501' || error.message?.includes('row-level')) {
+            setRlsBlocked(true);
+          }
+        } else if (inserted) {
+          const parsed = deserializeFocusTache(inserted as FocusTache);
           setFocusTaches((prev) =>
             prev.map((t) => (t.id === optimistic.id ? parsed : t))
           );
@@ -859,6 +1121,42 @@ export function StudioDataProvider({
       return { ok: true };
     },
     [focusTaches]
+  );
+
+  const updateFocusTache = useCallback(
+    async (id: string, patch: Partial<FocusTache>) => {
+      let merged: FocusTache | undefined;
+      setFocusTaches((prev) =>
+        prev.map((t) => {
+          if (t.id === id) {
+            merged = {
+              ...t,
+              ...patch,
+              contenu: patch.titre || patch.contenu || t.contenu,
+            };
+            return merged;
+          }
+          return t;
+        })
+      );
+
+      if (merged) {
+        try {
+          const supabase = createClient();
+          await supabase
+            .from('focus_taches')
+            .update({
+              type: merged.type,
+              contenu: serializeFocusTacheContenu(merged),
+              est_termine: merged.est_termine,
+            })
+            .eq('id', id);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    []
   );
 
   const toggleFocusTache = useCallback(
@@ -882,26 +1180,9 @@ export function StudioDataProvider({
 
   const updateFocusTacheUrgence = useCallback(
     async (id: string, urgence: UrgenceNiveau) => {
-      const target = focusTaches.find((t) => t.id === id);
-      setFocusTaches((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, urgence } : t))
-      );
-
-      if (target) {
-        try {
-          const supabase = createClient();
-          await supabase
-            .from('focus_taches')
-            .update({
-              contenu: encodeTaskContent(target.contenu, urgence),
-            })
-            .eq('id', id);
-        } catch {
-          // ignore
-        }
-      }
+      await updateFocusTache(id, { urgence });
     },
-    [focusTaches]
+    [updateFocusTache]
   );
 
   const convertIdeaToTask = useCallback(
@@ -921,35 +1202,15 @@ export function StudioDataProvider({
         };
       }
 
-      const target = focusTaches.find((t) => t.id === id);
-
-      setFocusTaches((prev) =>
-        prev.map((t) =>
-          t.id === id
-            ? { ...t, type: 'tache_jour', urgence, est_termine: false }
-            : t
-        )
-      );
-
-      if (target) {
-        try {
-          const supabase = createClient();
-          await supabase
-            .from('focus_taches')
-            .update({
-              type: 'tache_jour',
-              contenu: encodeTaskContent(target.contenu, urgence),
-              est_termine: false,
-            })
-            .eq('id', id);
-        } catch {
-          // ignore
-        }
-      }
+      await updateFocusTache(id, {
+        type: 'tache_jour',
+        urgence,
+        est_termine: false,
+      });
 
       return { ok: true };
     },
-    [focusTaches]
+    [focusTaches, updateFocusTache]
   );
 
   const deleteFocusTache = useCallback(async (id: string) => {
@@ -968,6 +1229,7 @@ export function StudioDataProvider({
       value={{
         isLoading,
         isLiveSupabase,
+        rlsBlocked,
         prospects,
         commandes,
         medias,
@@ -998,6 +1260,7 @@ export function StudioDataProvider({
         addFinance,
         deleteFinance,
         addFocusTache,
+        updateFocusTache,
         toggleFocusTache,
         updateFocusTacheUrgence,
         convertIdeaToTask,

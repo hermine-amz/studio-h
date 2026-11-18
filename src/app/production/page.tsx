@@ -19,6 +19,8 @@ import {
   Clock,
   SlidersHorizontal,
   X,
+  Link2,
+  Pencil,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -34,6 +36,7 @@ import {
   getVideoPreviewUrl,
   getImagePreviewUrl,
 } from '@/lib/currency';
+import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -77,14 +80,34 @@ function ProductionWorkshopContent() {
   const [isDelivering, setIsDelivering] = useState(false);
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // "Lire plus" toggle state for order briefs
+  const [expandedBriefs, setExpandedBriefs] = useState<Record<string, boolean>>(
+    {}
+  );
 
+  // Reference links & photos on active order
+  const [newRefLink, setNewRefLink] = useState('');
+  const [previewRefPhoto, setPreviewRefPhoto] = useState<string | null>(null);
+
+  // Edit Order Brief/Title Modal
+  const [isEditBriefOpen, setIsEditBriefOpen] = useState(false);
+  const [editPackTitle, setEditPackTitle] = useState('');
+  const [editPackBrief, setEditPackBrief] = useState('');
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const refPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const newOrderPhotoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // New Order Modal Form
   const [prospectId, setProspectId] = useState(prospects[0]?.id || '');
   const [nomPack, setNomPack] = useState('');
   const [briefProduit, setBriefProduit] = useState('');
   const [montantEur, setMontantEur] = useState('1450');
   const [nombreCreations, setNombreCreations] = useState('6');
   const [dateLimite, setDateLimite] = useState('');
+  const [newOrderLinkInput, setNewOrderLinkInput] = useState('');
+  const [newOrderLinks, setNewOrderLinks] = useState<string[]>([]);
+  const [newOrderPhotos, setNewOrderPhotos] = useState<string[]>([]);
 
   const filteredOrders = useMemo(() => {
     return commandes.filter(
@@ -114,6 +137,111 @@ function ProductionWorkshopContent() {
     () => orderMedias.filter((m) => m.pret_pour_livraison).length,
     [orderMedias]
   );
+
+  // Reference links & photos on active order
+  const handleAddOrderRefLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeOrder || !newRefLink.trim()) return;
+    const current = activeOrder.liens_reference || [];
+    await updateCommande(activeOrder.id, {
+      liens_reference: [...current, newRefLink.trim()],
+    });
+    setNewRefLink('');
+    toast({
+      title: 'Lien ajouté à la commande UGC',
+    });
+  };
+
+  const handleRemoveOrderRefLink = async (idx: number, url: string) => {
+    if (!activeOrder) return;
+    const ok = await confirm({
+      title: 'Supprimer ce lien de référence ?',
+      description: `Voulez-vous retirer le lien "${url}" de cette commande UGC ?`,
+      confirmLabel: 'Supprimer le lien',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const current = activeOrder.liens_reference || [];
+    await updateCommande(activeOrder.id, {
+      liens_reference: current.filter((_, i) => i !== idx),
+    });
+    toast({
+      title: 'Lien retiré',
+    });
+  };
+
+  const handleAddOrderRefPhotos = async (
+    files: FileList | null,
+    isModal = false
+  ) => {
+    if (!files || files.length === 0) return;
+    try {
+      const added: string[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await fileToResizedDataUrl(file, 850, 0.8);
+        added.push(dataUrl);
+      }
+      if (isModal) {
+        setNewOrderPhotos((prev) => [...prev, ...added]);
+      } else if (activeOrder) {
+        const current = activeOrder.photos_reference || [];
+        await updateCommande(activeOrder.id, {
+          photos_reference: [...current, ...added],
+        });
+      }
+      toast({
+        title: 'Photo(s) de référence ajoutée(s)',
+      });
+    } catch {
+      toast({
+        title: 'Impossible de charger la photo',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRemoveOrderRefPhoto = async (idx: number) => {
+    if (!activeOrder) return;
+    const ok = await confirm({
+      title: 'Supprimer cette photo de référence ?',
+      description:
+        'Voulez-vous retirer cette image de référence de la commande UGC ?',
+      confirmLabel: 'Supprimer la photo',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const current = activeOrder.photos_reference || [];
+    await updateCommande(activeOrder.id, {
+      photos_reference: current.filter((_, i) => i !== idx),
+    });
+  };
+
+  const openEditBriefModal = () => {
+    if (!activeOrder) return;
+    setEditPackTitle(activeOrder.nom_pack);
+    setEditPackBrief(activeOrder.brief_produit || '');
+    setIsEditBriefOpen(true);
+  };
+
+  const handleSaveEditedBrief = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeOrder || !editPackTitle.trim()) return;
+    const ok = await confirm({
+      title: 'Modifier le titre et la description de la commande ?',
+      description: `Confirmez-vous la mise à jour du pack "${editPackTitle}" ?`,
+      confirmLabel: 'Enregistrer',
+      variant: 'modify',
+    });
+    if (!ok) return;
+    await updateCommande(activeOrder.id, {
+      nom_pack: editPackTitle.trim(),
+      brief_produit: editPackBrief.trim() || null,
+    });
+    setIsEditBriefOpen(false);
+    toast({
+      title: 'Titre et description mis à jour',
+    });
+  };
 
   const handleChangeProdStatus = async (
     orderId: string,
@@ -326,10 +454,16 @@ function ProductionWorkshopContent() {
     e.preventDefault();
     if (!nomPack.trim() || !prospectId) return;
 
+    const finalLinks = newOrderLinkInput.trim()
+      ? [...newOrderLinks, newOrderLinkInput.trim()]
+      : newOrderLinks;
+
     const created = await addCommande({
       prospect_id: prospectId,
       nom_pack: nomPack.trim(),
       brief_produit: briefProduit.trim() || null,
+      liens_reference: finalLinks,
+      photos_reference: newOrderPhotos,
       statut_production: 'Brief reçu',
       montant_eur: Number(montantEur) || 0,
       statut_paiement: 'En attente',
@@ -342,6 +476,9 @@ function ProductionWorkshopContent() {
     setSelectedOrderId(created.id);
     setNomPack('');
     setBriefProduit('');
+    setNewOrderLinkInput('');
+    setNewOrderLinks([]);
+    setNewOrderPhotos([]);
     setIsNewOrderOpen(false);
 
     toast({
@@ -361,6 +498,15 @@ function ProductionWorkshopContent() {
       </div>
     );
   }
+
+  const activeBrief = activeOrder?.brief_produit || '';
+  const isBriefExpanded = activeOrder
+    ? Boolean(expandedBriefs[activeOrder.id])
+    : false;
+  const isBriefLong =
+    activeBrief.length > 130 || activeBrief.includes('\n');
+  const activeRefLinks = activeOrder?.liens_reference || [];
+  const activeRefPhotos = activeOrder?.photos_reference || [];
 
   return (
     <div className="space-y-5">
@@ -450,19 +596,39 @@ function ProductionWorkshopContent() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">
-                        {client?.nom_marque || 'Client Studio H'}
-                      </span>
-                      <h3 className="text-sm font-semibold text-zinc-900 leading-snug mt-0.5">
-                        {ord.nom_pack}
-                      </h3>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {client?.logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={client.logo_url}
+                          alt={client.nom_marque}
+                          className="h-7 w-7 rounded-lg object-cover border border-stone-200 shrink-0"
+                        />
+                      ) : (
+                        <div className="h-7 w-7 rounded-lg bg-[#FFF8B9]/70 border border-[#568203]/25 flex items-center justify-center text-xs font-bold text-[#568203] shrink-0">
+                          {(client?.nom_marque || 'C').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <span className="block text-[11px] font-mono uppercase tracking-wider text-zinc-500 truncate">
+                          {client?.nom_marque || 'Client Studio H'}
+                        </span>
+                        <h3 className="text-sm font-semibold text-zinc-900 leading-snug truncate">
+                          {ord.nom_pack}
+                        </h3>
+                      </div>
                     </div>
 
                     <span className="shrink-0 rounded-lg bg-[#568203] px-2.5 py-0.5 text-[11px] font-medium text-white">
                       {ord.statut_production}
                     </span>
                   </div>
+
+                  {ord.brief_produit && (
+                    <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                      {ord.brief_produit}
+                    </p>
+                  )}
 
                   <div className="flex items-center justify-between text-xs text-zinc-600 pt-2 border-t border-stone-200/70">
                     <div>
@@ -493,14 +659,22 @@ function ProductionWorkshopContent() {
             <div className="glass-card p-5 sm:p-6 space-y-5">
               {/* Order Header & Controls */}
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-5 border-b border-stone-200/85">
-                <div className="space-y-2">
+                <div className="space-y-2 flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     {activeClient && (
                       <Link
                         href={`/crm/${activeClient.id}?tab=infos`}
-                        className="rounded-lg bg-stone-100 hover:bg-[#FFF8B9]/70 border border-stone-200 px-2.5 py-1 text-xs font-medium text-zinc-800 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100 hover:bg-[#FFF8B9]/70 border border-stone-200 px-2.5 py-1 text-xs font-medium text-zinc-800 transition-colors"
                       >
-                        Client : {activeClient.nom_marque}
+                        {activeClient.logo_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={activeClient.logo_url}
+                            alt={activeClient.nom_marque}
+                            className="h-4 w-4 rounded object-cover"
+                          />
+                        )}
+                        <span>Client : {activeClient.nom_marque}</span>
                       </Link>
                     )}
                     {activeOrder.date_limite && (
@@ -509,16 +683,49 @@ function ProductionWorkshopContent() {
                         Deadline : {activeOrder.date_limite}
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={openEditBriefModal}
+                      className="inline-flex items-center gap-1 rounded-lg bg-white hover:bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-600"
+                    >
+                      <Pencil className="h-3 w-3" strokeWidth={1.5} />
+                      <span>Modifier titre / brief</span>
+                    </button>
                   </div>
 
                   <h2 className="text-lg sm:text-xl font-semibold text-zinc-900">
                     {activeOrder.nom_pack}
                   </h2>
 
-                  {activeOrder.brief_produit && (
-                    <p className="text-[13px] text-zinc-600 leading-relaxed max-w-2xl">
-                      {activeOrder.brief_produit}
-                    </p>
+                  {/* Description with Short Preview & "Lire plus" */}
+                  {activeBrief && (
+                    <div className="rounded-xl bg-stone-50 border border-stone-200/85 p-3.5">
+                      <p
+                        className={`text-[13px] text-zinc-700 leading-relaxed whitespace-pre-wrap ${
+                          !isBriefExpanded ? 'line-clamp-2' : ''
+                        }`}
+                      >
+                        {activeBrief}
+                      </p>
+                      {isBriefLong && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedBriefs((prev) => ({
+                              ...prev,
+                              [activeOrder.id]: !prev[activeOrder.id],
+                            }))
+                          }
+                          className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-[#568203] hover:underline"
+                        >
+                          <span>
+                            {isBriefExpanded
+                              ? 'Réduire la description'
+                              : 'Lire plus'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -575,6 +782,121 @@ function ProductionWorkshopContent() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Section: Reference Links & Photos for this UGC Video / Pack */}
+              <div className="rounded-xl bg-stone-50/90 border border-stone-200 p-4 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-800">
+                      Liens & Photos de Référence de la Commande UGC
+                    </h3>
+                    <p className="text-[11px] text-zinc-500">
+                      Ajoutez des liens (produits, pubs, scripts) et des photos/captures de référence
+                    </p>
+                  </div>
+
+                  <div>
+                    <input
+                      ref={refPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) =>
+                        handleAddOrderRefPhotos(e.target.files, false)
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => refPhotoInputRef.current?.click()}
+                      className="btn-secondary py-1.5 px-3 text-xs"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span>+ Ajouter Photo Réf.</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Add Link Form */}
+                <form onSubmit={handleAddOrderRefLink} className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newRefLink}
+                    onChange={(e) => setNewRefLink(e.target.value)}
+                    placeholder="Coller un lien (page produit, exemple TikTok/Reels, script Drive)..."
+                    className="glass-input flex-1"
+                  />
+                  <button type="submit" className="btn-primary py-1.5 px-3 text-xs">
+                    <Link2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <span>+ Lien</span>
+                  </button>
+                </form>
+
+                {/* Display Links */}
+                {activeRefLinks.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {activeRefLinks.map((lnk, idx) => (
+                      <div
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-stone-200 px-2.5 py-1 text-xs"
+                      >
+                        <a
+                          href={lnk}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-[#568203] hover:underline truncate max-w-[240px]"
+                        >
+                          <Link2 className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          <span className="truncate">{lnk}</span>
+                          <ExternalLink
+                            className="h-2.5 w-2.5 shrink-0"
+                            strokeWidth={1.5}
+                          />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOrderRefLink(idx, lnk)}
+                          className="text-zinc-400 hover:text-red-600 ml-1"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Display Photos */}
+                {activeRefPhotos.length > 0 && (
+                  <div className="flex flex-wrap gap-2.5 pt-1">
+                    {activeRefPhotos.map((ph, idx) => (
+                      <div
+                        key={idx}
+                        className="relative h-16 w-16 rounded-xl overflow-hidden border border-stone-200 bg-white group"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setPreviewRefPhoto(ph)}
+                          className="h-full w-full block"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={ph}
+                            alt="Référence UGC"
+                            className="h-full w-full object-cover"
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOrderRefPhoto(idx)}
+                          className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/75 p-0.5 text-white"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Drive Subfolder & Delivery Action Bar */}
@@ -663,7 +985,7 @@ function ProductionWorkshopContent() {
                 <p className="text-[13.5px] font-medium text-zinc-900">
                   {isUploading
                     ? 'Transfert en cours vers Google Drive...'
-                    : 'Glissez-déposez vos créations MP4, MOV, PNG ou JPG ici'}
+                    : 'Glissez-déposez vos créations finales MP4, MOV, PNG ou JPG ici'}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">
                   Upload direct vers le sous-dossier Google Drive de la commande
@@ -689,7 +1011,7 @@ function ProductionWorkshopContent() {
 
                 {orderMedias.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-stone-200 p-6 text-center text-xs text-zinc-500">
-                    Aucun média rattaché à cette commande pour l’instant.
+                    Aucun média livrable rattaché à cette commande pour l’instant.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -798,10 +1120,10 @@ function ProductionWorkshopContent() {
         </div>
       </div>
 
-      {/* Modal: Create Order */}
+      {/* Modal: Create Rich UGC Order */}
       {isNewOrderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
-          <div className="glass-card w-full max-w-lg p-5 sm:p-6 border border-stone-200 shadow-xl">
+          <div className="glass-card w-full max-w-xl p-5 sm:p-6 border border-stone-200 max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
                 <Video
@@ -809,7 +1131,7 @@ function ProductionWorkshopContent() {
                   strokeWidth={1.5}
                 />
                 <h2 className="text-base font-semibold text-zinc-900">
-                  Nouvelle Commande UGC
+                  Nouvelle Commande / Vidéo UGC
                 </h2>
               </div>
               <button
@@ -842,7 +1164,7 @@ function ProductionWorkshopContent() {
 
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                  Intitulé du Pack *
+                  Titre du Pack / Vidéo UGC *
                 </label>
                 <input
                   type="text"
@@ -897,15 +1219,121 @@ function ProductionWorkshopContent() {
 
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                  Brief Produit
+                  Description / Brief Produit & Script
                 </label>
                 <textarea
                   rows={3}
                   value={briefProduit}
                   onChange={(e) => setBriefProduit(e.target.value)}
-                  placeholder="Instructions de production, script, avatar, format..."
+                  placeholder="Instructions de production, script, avatar, format (s'affichera avec un bouton Lire plus)..."
                   className="glass-input"
                 />
+              </div>
+
+              {/* Optional Reference Links */}
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
+                  Liens de référence (Produit, Pubs, Script...)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newOrderLinkInput}
+                    onChange={(e) => setNewOrderLinkInput(e.target.value)}
+                    placeholder="https://..."
+                    className="glass-input flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newOrderLinkInput.trim()) return;
+                      setNewOrderLinks((prev) => [
+                        ...prev,
+                        newOrderLinkInput.trim(),
+                      ]);
+                      setNewOrderLinkInput('');
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    + Lien
+                  </button>
+                </div>
+                {newOrderLinks.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {newOrderLinks.map((lnk, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-700"
+                      >
+                        <span className="truncate max-w-[200px]">{lnk}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewOrderLinks((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="text-zinc-400 hover:text-red-600"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Optional Reference Photos */}
+              <div>
+                <input
+                  ref={newOrderPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleAddOrderRefPhotos(e.target.files, true)}
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium uppercase tracking-wider text-zinc-700">
+                    Photos / Visuels de référence ({newOrderPhotos.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => newOrderPhotoInputRef.current?.click()}
+                    className="btn-secondary py-1.5 px-3 text-xs"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <span>+ Ajouter photo</span>
+                  </button>
+                </div>
+                {newOrderPhotos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {newOrderPhotos.map((ph, idx) => (
+                      <div
+                        key={idx}
+                        className="relative h-14 w-14 rounded-lg overflow-hidden border border-stone-200"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={ph}
+                          alt="Référence"
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewOrderPhotos((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/70 p-0.5 text-white"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2.5 pt-3.5 border-t border-stone-200/85">
@@ -921,6 +1349,89 @@ function ProductionWorkshopContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Active Order Title & Brief */}
+      {isEditBriefOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+          <div className="glass-card w-full max-w-lg p-5 sm:p-6 border border-stone-200 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+              <h3 className="text-base font-semibold text-zinc-900">
+                Modifier le titre et la description UGC
+              </h3>
+              <button
+                onClick={() => setIsEditBriefOpen(false)}
+                className="rounded-lg p-1 text-zinc-400 hover:text-zinc-800"
+              >
+                <X className="h-5 w-5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedBrief} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Titre du Pack / Vidéo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editPackTitle}
+                  onChange={(e) => setEditPackTitle(e.target.value)}
+                  className="glass-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Description / Brief & Script
+                </label>
+                <textarea
+                  rows={5}
+                  value={editPackBrief}
+                  onChange={(e) => setEditPackBrief(e.target.value)}
+                  className="glass-input"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setIsEditBriefOpen(false)}
+                  className="btn-secondary"
+                >
+                  Annuler
+                </button>
+                <button type="submit" className="btn-primary">
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Reference Photo Preview */}
+      {previewRefPhoto && (
+        <div
+          onClick={() => setPreviewRefPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/70 backdrop-blur-sm p-4"
+        >
+          <div className="relative max-w-3xl max-h-[85vh] rounded-2xl overflow-hidden bg-white p-2 shadow-2xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewRefPhoto}
+              alt="Photo de référence"
+              className="max-h-[80vh] w-auto object-contain rounded-xl"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewRefPhoto(null)}
+              className="absolute top-4 right-4 rounded-full bg-zinc-900/80 p-2 text-white"
+            >
+              <X className="h-4 w-4" strokeWidth={1.5} />
+            </button>
           </div>
         </div>
       )}

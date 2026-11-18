@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -28,6 +28,7 @@ import {
   Save,
   Layers,
   Link2,
+  X,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -39,6 +40,7 @@ import {
   getVideoPreviewUrl,
   getImagePreviewUrl,
 } from '@/lib/currency';
+import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type {
@@ -52,8 +54,7 @@ function Client360Content() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const clientId = params?.id || '';
-  const initialTab =
-    searchParams.get('tab') === 'infos' ? 'infos' : 'infos';
+  const initialTab = searchParams.get('tab') === '360' ? '360' : 'infos';
 
   const {
     isLoading,
@@ -107,9 +108,10 @@ function Client360Content() {
     [totalRevenueEur, totalOrdersCount]
   );
 
-  // Editable Contact & Socials state
+  // Editable Contact, Logo & Socials state
   const [nomMarque, setNomMarque] = useState('');
   const [pays, setPays] = useState('FR');
+  const [logoUrl, setLogoUrl] = useState<string>('');
   const [statut, setStatut] = useState<ProspectStatut>('À contacter');
   const [valeurEstimee, setValeurEstimee] = useState('0');
   const [contactNom, setContactNom] = useState('');
@@ -131,10 +133,13 @@ function Client360Content() {
   // Strategic Notepad
   const [notes, setNotes] = useState('');
 
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (client) {
       setNomMarque(client.nom_marque || '');
       setPays(client.pays || 'FR');
+      setLogoUrl(client.logo_url || '');
       setStatut(client.statut);
       setValeurEstimee(String(client.valeur_estimee_eur || 0));
       setContactNom(client.contact_nom || '');
@@ -149,6 +154,25 @@ function Client360Content() {
       setNotes(client.notes_strategiques || '');
     }
   }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLogoUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(files[0], 260, 0.85);
+      setLogoUrl(dataUrl);
+      if (client) {
+        await updateProspect(client.id, { logo_url: dataUrl });
+      }
+      toast({
+        title: 'Logo du client enregistré',
+      });
+    } catch {
+      toast({
+        title: 'Image invalide',
+        type: 'error',
+      });
+    }
+  };
 
   // Subfolder creation state
   const [isSubfolderOpen, setIsSubfolderOpen] = useState(false);
@@ -175,7 +199,7 @@ function Client360Content() {
     const ok = await confirm({
       title: `Enregistrer les modifications de ${client.nom_marque} ?`,
       description:
-        'Voulez-vous mettre à jour les coordonnées (email, numéro, boutique) et les liens des réseaux sociaux de ce prospect ?',
+        'Voulez-vous mettre à jour le logo, les coordonnées (email, numéro, boutique) et les liens des réseaux sociaux de ce prospect ?',
       confirmLabel: 'Enregistrer les modifications',
       variant: 'modify',
     });
@@ -185,6 +209,7 @@ function Client360Content() {
     await updateProspect(client.id, {
       nom_marque: nomMarque.trim() || client.nom_marque,
       pays,
+      logo_url: logoUrl.trim() || null,
       statut,
       valeur_estimee_eur: Number(valeurEstimee) || 0,
       contact_nom: contactNom.trim() || null,
@@ -203,7 +228,8 @@ function Client360Content() {
 
     toast({
       title: 'Fiche prospect mise à jour',
-      description: 'Les coordonnées, réseaux sociaux et notes ont été enregistrés.',
+      description:
+        'Le logo, les coordonnées, réseaux sociaux et notes ont été enregistrés.',
     });
   };
 
@@ -218,7 +244,8 @@ function Client360Content() {
     setNewAdUrl('');
     toast({
       title: 'Lien publicitaire ajouté',
-      description: 'Le lien de pub Facebook / Ad Library a été rattaché au prospect.',
+      description:
+        'Le lien de pub Facebook / Ad Library a été rattaché au prospect.',
     });
   };
 
@@ -377,7 +404,7 @@ function Client360Content() {
 
   return (
     <div className="space-y-5">
-      {/* Top Breadcrumb & Client Identity */}
+      {/* Top Breadcrumb & Client Identity with Optional Logo */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1.5">
           <Link
@@ -388,7 +415,19 @@ function Client360Content() {
             <span>Retour au Pipeline CRM Europe</span>
           </Link>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            {client.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={client.logo_url}
+                alt={client.nom_marque}
+                className="h-11 w-11 rounded-xl object-cover border border-stone-200 shadow-sm"
+              />
+            ) : (
+              <div className="h-11 w-11 rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 flex items-center justify-center text-base font-bold text-[#568203]">
+                {client.nom_marque.charAt(0).toUpperCase()}
+              </div>
+            )}
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
               {client.nom_marque}
             </h1>
@@ -461,7 +500,7 @@ function Client360Content() {
         </div>
       </div>
 
-      {/* Navigation Tabs: Onglet 1 (Coordonnées, Pubs FB, Produits & Réseaux) / Onglet 2 (Vue 360° & Commandes) */}
+      {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-stone-200 pb-3 overflow-x-auto">
         <button
           type="button"
@@ -473,7 +512,7 @@ function Client360Content() {
           }`}
         >
           <Link2 className="h-4 w-4" strokeWidth={1.5} />
-          <span>Coordonnées, Pubs Facebook, Produits & Réseaux</span>
+          <span>Logo, Coordonnées, Pubs Facebook, Produits & Réseaux</span>
         </button>
 
         <button
@@ -486,15 +525,17 @@ function Client360Content() {
           }`}
         >
           <Layers className="h-4 w-4" strokeWidth={1.5} />
-          <span>Vue 360°, Drive, Commandes & Créations ({clientOrders.length})</span>
+          <span>
+            Vue 360°, Drive, Commandes & Créations ({clientOrders.length})
+          </span>
         </button>
       </div>
 
-      {/* ================= ONGLET 1 : COORDONNÉES, PUBS FACEBOOK, PRODUITS & RÉSEAUX SOCIAUX ================= */}
+      {/* ================= ONGLET 1 : LOGO, COORDONNÉES, PUBS FACEBOOK, PRODUITS & RÉSEAUX SOCIAUX ================= */}
       {activeTab === 'infos' && (
         <div className="space-y-5">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* Left Column (7 cols): Coordonnées, Email, Numéro & Réseaux Sociaux */}
+            {/* Left Column (7 cols) */}
             <form
               onSubmit={handleSaveContactAndSocials}
               className="lg:col-span-7 glass-card p-5 space-y-5"
@@ -509,10 +550,10 @@ function Client360Content() {
                   </div>
                   <div>
                     <h2 className="text-[15px] font-semibold text-zinc-900">
-                      Coordonnées & Réseaux Sociaux du Prospect
+                      Logo, Coordonnées & Réseaux Sociaux
                     </h2>
                     <p className="text-xs text-zinc-500">
-                      Email, téléphone/WhatsApp, boutique et profils sociaux
+                      Identité visuelle, email, téléphone/WhatsApp et profils sociaux
                     </p>
                   </div>
                 </div>
@@ -521,6 +562,59 @@ function Client360Content() {
                   <Save className="h-4 w-4" strokeWidth={1.5} />
                   <span>Enregistrer</span>
                 </button>
+              </div>
+
+              {/* Optional Client Logo Section */}
+              <div className="rounded-xl bg-stone-50 border border-stone-200/90 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleLogoUpload(e.target.files)}
+                  />
+                  {logoUrl ? (
+                    <div className="relative h-14 w-14 rounded-xl overflow-hidden border border-stone-200 bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={logoUrl}
+                        alt="Logo client"
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl('')}
+                        className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/70 p-0.5 text-white"
+                      >
+                        <X className="h-3 w-3" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-14 w-14 rounded-xl border border-dashed border-stone-300 bg-white flex items-center justify-center text-zinc-400">
+                      <ImageIcon className="h-5 w-5" strokeWidth={1.5} />
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-xs font-semibold text-zinc-900">
+                      Logo de la marque (Optionnel)
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Importez une image depuis votre appareil ou collez un lien d’image
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="btn-secondary py-1.5 px-3 text-xs"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <span>Importer un logo</span>
+                  </button>
+                </div>
               </div>
 
               {/* Brand, Country, Status, Value */}
@@ -997,7 +1091,6 @@ function Client360Content() {
 
           {/* 2. Drive Tree & Strategic Notepad */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Arborescence Google Drive */}
             <section className="glass-card p-5 space-y-4">
               <div className="flex items-center justify-between pb-3.5 border-b border-stone-200/85">
                 <div className="flex items-center gap-2.5">
@@ -1121,7 +1214,7 @@ function Client360Content() {
               </div>
             </section>
 
-            {/* Bloc-Notes Stratégique (Avec confirmation modal) */}
+            {/* Bloc-Notes Stratégique */}
             <section className="glass-card p-5 flex flex-col justify-between space-y-4">
               <div>
                 <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-stone-200/85">
@@ -1351,7 +1444,7 @@ function Client360Content() {
             <form onSubmit={handleAddOrder} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                  Nom du Pack *
+                  Titre / Nom du Pack *
                 </label>
                 <input
                   type="text"
@@ -1452,7 +1545,7 @@ function Client360Content() {
 
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
-                  Brief Produit & Directives
+                  Description / Brief Produit & Directives
                 </label>
                 <textarea
                   rows={3}

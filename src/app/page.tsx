@@ -18,11 +18,18 @@ import {
   ChevronRight,
   Layers,
   Flame,
+  Link2,
+  Image as ImageIcon,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
-import type { UrgenceNiveau } from '@/types/database';
+import type { UrgenceNiveau, FocusTache } from '@/types/database';
 import {
   formatEur,
   formatFcfa,
@@ -30,6 +37,7 @@ import {
   hoursUntil,
   normalizeCountryCode,
 } from '@/lib/currency';
+import { fileToResizedDataUrl } from '@/lib/image-resize';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -49,6 +57,7 @@ export default function CockpitPage() {
     monthlyGoalEur,
     setMonthlyGoalEur,
     addFocusTache,
+    updateFocusTache,
     toggleFocusTache,
     updateFocusTacheUrgence,
     convertIdeaToTask,
@@ -63,10 +72,31 @@ export default function CockpitPage() {
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskUrgence, setNewTaskUrgence] =
     useState<UrgenceNiveau>('Critique');
-  const [newIdeaText, setNewIdeaText] = useState('');
+
+  // Rich Idea Box State
+  const [ideaTitle, setIdeaTitle] = useState('');
+  const [ideaDescription, setIdeaDescription] = useState('');
+  const [ideaLinkInput, setIdeaLinkInput] = useState('');
+  const [ideaLinks, setIdeaLinks] = useState<string[]>([]);
+  const [ideaPhotos, setIdeaPhotos] = useState<string[]>([]);
+  const [showIdeaExtras, setShowIdeaExtras] = useState(false);
+  const [expandedIdeas, setExpandedIdeas] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+
+  // Edit Idea Modal
+  const [editingIdea, setEditingIdea] = useState<FocusTache | null>(null);
+  const [editIdeaTitle, setEditIdeaTitle] = useState('');
+  const [editIdeaDesc, setEditIdeaDesc] = useState('');
+  const [editIdeaLinks, setEditIdeaLinks] = useState<string[]>([]);
+  const [editIdeaLinkInput, setEditIdeaLinkInput] = useState('');
+  const [editIdeaPhotos, setEditIdeaPhotos] = useState<string[]>([]);
 
   const taskInputRef = useRef<HTMLInputElement | null>(null);
-  const ideaInputRef = useRef<HTMLInputElement | null>(null);
+  const ideaTitleRef = useRef<HTMLInputElement | null>(null);
+  const ideaPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const editIdeaPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const monthlyRevenueEur = useMemo(() => {
     const now = new Date();
@@ -234,17 +264,101 @@ export default function CockpitPage() {
     });
   };
 
+  // --- Rich Idea Handlers ---
+  const handleAddIdeaPhoto = async (
+    files: FileList | null,
+    isEdit = false
+  ) => {
+    if (!files || files.length === 0) return;
+    try {
+      const added: string[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await fileToResizedDataUrl(file, 850, 0.8);
+        added.push(dataUrl);
+      }
+      if (isEdit) {
+        setEditIdeaPhotos((prev) => [...prev, ...added]);
+      } else {
+        setIdeaPhotos((prev) => [...prev, ...added]);
+      }
+      toast({
+        title: 'Photo(s) ajoutée(s) à l’idée',
+      });
+    } catch {
+      toast({
+        title: 'Impossible de charger la photo',
+        type: 'error',
+      });
+    }
+  };
+
   const handleAddIdea = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newIdeaText.trim()) {
-      ideaInputRef.current?.focus();
+    if (!ideaTitle.trim()) {
+      ideaTitleRef.current?.focus();
       return;
     }
-    await addFocusTache('boite_idee', newIdeaText);
-    setNewIdeaText('');
+
+    const finalLinks = ideaLinkInput.trim()
+      ? [...ideaLinks, ideaLinkInput.trim()]
+      : ideaLinks;
+
+    await addFocusTache('boite_idee', ideaTitle, 'Normale', {
+      description: ideaDescription,
+      liens: finalLinks,
+      photos: ideaPhotos,
+    });
+
+    setIdeaTitle('');
+    setIdeaDescription('');
+    setIdeaLinkInput('');
+    setIdeaLinks([]);
+    setIdeaPhotos([]);
+    setShowIdeaExtras(false);
+
     toast({
-      title: 'Idée capturée',
-      description: 'Ajoutée dans votre boîte à idées.',
+      title: 'Idée enrichie enregistrée',
+      description: 'Ajoutée dans votre boîte à idées avec ses détails.',
+    });
+  };
+
+  const openEditIdeaModal = (idea: FocusTache) => {
+    setEditingIdea(idea);
+    setEditIdeaTitle(idea.titre || idea.contenu);
+    setEditIdeaDesc(idea.description || '');
+    setEditIdeaLinks(idea.liens || []);
+    setEditIdeaLinkInput('');
+    setEditIdeaPhotos(idea.photos || []);
+  };
+
+  const handleSaveEditedIdea = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIdea || !editIdeaTitle.trim()) return;
+
+    const ok = await confirm({
+      title: `Modifier l'idée "${editingIdea.titre || editingIdea.contenu}" ?`,
+      description:
+        'Voulez-vous enregistrer les modifications apportées au titre, à la description, aux liens et aux photos de cette idée ?',
+      confirmLabel: 'Enregistrer les modifications',
+      variant: 'modify',
+    });
+    if (!ok) return;
+
+    const finalLinks = editIdeaLinkInput.trim()
+      ? [...editIdeaLinks, editIdeaLinkInput.trim()]
+      : editIdeaLinks;
+
+    await updateFocusTache(editingIdea.id, {
+      titre: editIdeaTitle.trim(),
+      contenu: editIdeaTitle.trim(),
+      description: editIdeaDesc.trim(),
+      liens: finalLinks,
+      photos: editIdeaPhotos,
+    });
+
+    setEditingIdea(null);
+    toast({
+      title: 'Idée mise à jour',
     });
   };
 
@@ -314,7 +428,7 @@ export default function CockpitPage() {
 
   return (
     <div className="space-y-5">
-      {/* Balanced Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
@@ -341,7 +455,10 @@ export default function CockpitPage() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#FFF8B9]/80 border border-[#568203]/25 px-2.5 py-1 text-xs font-medium text-zinc-800">
-              <Target className="h-3.5 w-3.5 text-[#568203]" strokeWidth={1.5} />
+              <Target
+                className="h-3.5 w-3.5 text-[#568203]"
+                strokeWidth={1.5}
+              />
               <span>Objectif Mensuel — Chiffre d’Affaires Encaissé</span>
             </div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-0.5">
@@ -412,8 +529,8 @@ export default function CockpitPage() {
         </div>
       </section>
 
-      {/* 2. 10 Daily Tasks with Urgency & Quick Idea Box */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* 2. 10 Daily Tasks with Urgency & Rich Quick Idea Box */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         {/* Widget 1: 10 Actions du Jour & Niveau d'Urgence */}
         <section className="glass-card p-5 flex flex-col justify-between">
           <div>
@@ -489,7 +606,7 @@ export default function CockpitPage() {
               </div>
             </form>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {dailyTasks.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-400">
                   Aucune tâche définie pour aujourd’hui. Tapez une tâche ci-dessus, choisissez son urgence et cliquez sur Ajouter.
@@ -531,7 +648,7 @@ export default function CockpitPage() {
                               : 'text-zinc-800'
                           }`}
                         >
-                          {task.contenu}
+                          {task.titre || task.contenu}
                         </span>
                       </button>
 
@@ -548,7 +665,7 @@ export default function CockpitPage() {
                             onChange={(e) =>
                               handleChangeTaskUrgence(
                                 task.id,
-                                task.contenu,
+                                task.titre || task.contenu,
                                 e.target.value as UrgenceNiveau
                               )
                             }
@@ -566,7 +683,11 @@ export default function CockpitPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            handleDeleteTaskOrIdea(task.id, task.contenu, false)
+                            handleDeleteTaskOrIdea(
+                              task.id,
+                              task.titre || task.contenu,
+                              false
+                            )
                           }
                           className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                           aria-label="Supprimer la tâche"
@@ -582,7 +703,7 @@ export default function CockpitPage() {
           </div>
         </section>
 
-        {/* Widget 2: Boîte à Idées Rapide */}
+        {/* Widget 2: Boîte à Idées Rapide Enrichie (Titre, Description + Lire plus, Liens, Photos) */}
         <section className="glass-card p-5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between gap-2 pb-3.5 mb-4 border-b border-stone-100">
@@ -595,10 +716,10 @@ export default function CockpitPage() {
                 </div>
                 <div>
                   <h2 className="text-[15px] font-semibold text-zinc-900">
-                    Boîte à Idées Rapide
+                    Boîte à Idées Rapide (Titres, Descriptions, Liens & Photos)
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Capturez vos idées sans quitter l’écran
+                    Capturez vos idées créatives avec aperçu court et médias attachés
                   </p>
                 </div>
               </div>
@@ -608,61 +729,301 @@ export default function CockpitPage() {
               </span>
             </div>
 
-            <form onSubmit={handleAddIdea} className="flex gap-2 mb-4">
-              <input
-                ref={ideaInputRef}
-                type="text"
-                value={newIdeaText}
-                onChange={(e) => setNewIdeaText(e.target.value)}
-                placeholder="Noter une idée de hook, d’offre..."
-                className="glass-input flex-1"
-              />
-              <button type="submit" className="btn-primary shrink-0">
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
-                <span>Noter</span>
-              </button>
+            {/* Form to Add a Rich Idea */}
+            <form onSubmit={handleAddIdea} className="space-y-2.5 mb-4">
+              <div className="flex gap-2">
+                <input
+                  ref={ideaTitleRef}
+                  type="text"
+                  value={ideaTitle}
+                  onChange={(e) => setIdeaTitle(e.target.value)}
+                  placeholder="Titre de l’idée (ex: Concept Hook Miroir Skincare)..."
+                  className="glass-input flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowIdeaExtras((prev) => !prev)}
+                  className="btn-secondary px-3 text-xs"
+                  title="Ajouter description, liens et photos"
+                >
+                  {showIdeaExtras ? (
+                    <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+                  )}
+                  <span>Détails / Médias</span>
+                </button>
+                <button type="submit" className="btn-primary shrink-0">
+                  <Plus className="h-4 w-4" strokeWidth={1.5} />
+                  <span>Noter</span>
+                </button>
+              </div>
+
+              {showIdeaExtras && (
+                <div className="rounded-xl bg-stone-50 border border-stone-200/90 p-3.5 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Description détaillée
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={ideaDescription}
+                      onChange={(e) => setIdeaDescription(e.target.value)}
+                      placeholder="Décrivez le déroulé du hook, l'angle psychologique, le script..."
+                      className="glass-input"
+                    />
+                  </div>
+
+                  {/* Links */}
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Ajouter des liens d’inspiration (TikTok, Ad Library, Drive...)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={ideaLinkInput}
+                        onChange={(e) => setIdeaLinkInput(e.target.value)}
+                        placeholder="https://..."
+                        className="glass-input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!ideaLinkInput.trim()) return;
+                          setIdeaLinks((prev) => [
+                            ...prev,
+                            ideaLinkInput.trim(),
+                          ]);
+                          setIdeaLinkInput('');
+                        }}
+                        className="btn-secondary text-xs"
+                      >
+                        <Link2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        <span>+ Lien</span>
+                      </button>
+                    </div>
+                    {ideaLinks.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {ideaLinks.map((lnk, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-stone-200 px-2.5 py-1 text-xs text-zinc-700"
+                          >
+                            <span className="truncate max-w-[180px]">
+                              {lnk}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setIdeaLinks((prev) =>
+                                  prev.filter((_, i) => i !== idx)
+                                )
+                              }
+                              className="text-zinc-400 hover:text-red-600"
+                            >
+                              <X className="h-3 w-3" strokeWidth={1.5} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Photos */}
+                  <div>
+                    <input
+                      ref={ideaPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => handleAddIdeaPhoto(e.target.files, false)}
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+                        Photos / Captures d’écran ({ideaPhotos.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => ideaPhotoInputRef.current?.click()}
+                        className="btn-secondary py-1.5 px-2.5 text-xs"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        <span>+ Ajouter photo</span>
+                      </button>
+                    </div>
+                    {ideaPhotos.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {ideaPhotos.map((ph, idx) => (
+                          <div
+                            key={idx}
+                            className="relative h-14 w-14 rounded-lg overflow-hidden border border-stone-200 group"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={ph}
+                              alt="Aperçu idée"
+                              className="h-full w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setIdeaPhotos((prev) =>
+                                  prev.filter((_, i) => i !== idx)
+                                )
+                              }
+                              className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/70 p-0.5 text-white"
+                            >
+                              <X className="h-3 w-3" strokeWidth={1.5} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </form>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {/* Ideas List with Short Preview & "Lire plus" */}
+            <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
               {ideaItems.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-400">
                   Votre boîte à idées est vide.
                 </div>
               ) : (
-                ideaItems.map((idea) => (
-                  <div
-                    key={idea.id}
-                    className="flex items-center justify-between gap-2.5 rounded-xl bg-stone-50/80 border border-stone-200/80 px-3.5 py-2.5"
-                  >
-                    <p className="text-[13px] text-zinc-800 leading-snug flex-1">
-                      {idea.contenu}
-                    </p>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handlePromoteIdea(idea.id, idea.contenu)}
-                        title="Convertir en tâche du jour"
-                        className="inline-flex items-center gap-1 rounded-lg bg-white hover:bg-[#FFF8B9]/50 border border-stone-200 px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors"
-                      >
-                        <ArrowUpRight
-                          className="h-3.5 w-3.5 text-[#568203]"
-                          strokeWidth={1.5}
-                        />
-                        <span>En tâche</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteTaskOrIdea(idea.id, idea.contenu, true)
-                        }
-                        className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        aria-label="Supprimer l'idée"
-                      >
-                        <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                      </button>
+                ideaItems.map((idea) => {
+                  const title = idea.titre || idea.contenu;
+                  const desc = idea.description || '';
+                  const links = idea.liens || [];
+                  const photos = idea.photos || [];
+                  const isExpanded = Boolean(expandedIdeas[idea.id]);
+                  const isLongDesc = desc.length > 110 || desc.includes('\n');
+
+                  return (
+                    <div
+                      key={idea.id}
+                      className="rounded-xl bg-stone-50/90 border border-stone-200/90 p-3.5 space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug">
+                            {title}
+                          </h3>
+                          {desc && (
+                            <div className="mt-1">
+                              <p
+                                className={`text-xs text-zinc-600 leading-relaxed whitespace-pre-wrap ${
+                                  !isExpanded ? 'line-clamp-2' : ''
+                                }`}
+                              >
+                                {desc}
+                              </p>
+                              {isLongDesc && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedIdeas((prev) => ({
+                                      ...prev,
+                                      [idea.id]: !prev[idea.id],
+                                    }))
+                                  }
+                                  className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#568203] hover:underline"
+                                >
+                                  <span>
+                                    {isExpanded ? 'Réduire' : 'Lire plus'}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditIdeaModal(idea)}
+                            className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-800 hover:bg-stone-200/60 transition-colors"
+                            title="Modifier l'idée"
+                          >
+                            <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePromoteIdea(idea.id, title)}
+                            title="Convertir en tâche du jour"
+                            className="inline-flex items-center gap-1 rounded-lg bg-white hover:bg-[#FFF8B9]/60 border border-stone-200 px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors"
+                          >
+                            <ArrowUpRight
+                              className="h-3.5 w-3.5 text-[#568203]"
+                              strokeWidth={1.5}
+                            />
+                            <span>En tâche</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteTaskOrIdea(idea.id, title, true)
+                            }
+                            className="rounded-lg p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            aria-label="Supprimer l'idée"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Attached Links */}
+                      {links.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {links.map((lnk, idx) => (
+                            <a
+                              key={idx}
+                              href={lnk}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg bg-white border border-stone-200 px-2.5 py-1 text-[11px] font-medium text-[#568203] hover:underline max-w-full"
+                            >
+                              <Link2
+                                className="h-3 w-3 shrink-0"
+                                strokeWidth={1.5}
+                              />
+                              <span className="truncate max-w-[200px]">
+                                {lnk}
+                              </span>
+                              <ExternalLink
+                                className="h-2.5 w-2.5 shrink-0"
+                                strokeWidth={1.5}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Attached Photos */}
+                      {photos.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {photos.map((ph, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setPreviewPhoto(ph)}
+                              className="h-14 w-14 rounded-lg overflow-hidden border border-stone-200 hover:border-[#568203] transition-all"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={ph}
+                                alt={title}
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -671,7 +1032,6 @@ export default function CockpitPage() {
 
       {/* 3. Alertes de Relance (> 3 jours) & Deadlines (< 48h) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Relances Prospects (> 3 jours) */}
         <section className="glass-card p-5">
           <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-stone-100">
             <div className="flex items-center gap-2.5">
@@ -709,25 +1069,32 @@ export default function CockpitPage() {
                     key={prospect.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl bg-stone-50/80 border border-stone-200 px-3.5 py-3"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/crm/${prospect.id}?tab=infos`}
-                          className="text-[13px] font-semibold text-zinc-900 hover:underline"
-                        >
-                          {prospect.nom_marque}
-                        </Link>
-                        <span className="rounded bg-white border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
-                          {normalizeCountryCode(prospect.pays)}
-                        </span>
-                        <span className="rounded bg-[#FFF8B9]/70 border border-[#568203]/20 px-2 py-0.5 text-[11px] text-zinc-800">
-                          {prospect.statut}
-                        </span>
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        Sans contact depuis{' '}
-                        <strong className="text-zinc-800">{elapsed} j</strong> •{' '}
-                        {formatEur(prospect.valeur_estimee_eur)}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {prospect.logo_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={prospect.logo_url}
+                          alt={prospect.nom_marque}
+                          className="h-8 w-8 rounded-lg object-cover border border-stone-200 shrink-0"
+                        />
+                      )}
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/crm/${prospect.id}?tab=infos`}
+                            className="text-[13px] font-semibold text-zinc-900 hover:underline truncate"
+                          >
+                            {prospect.nom_marque}
+                          </Link>
+                          <span className="rounded bg-white border border-stone-200 px-1.5 py-0.5 text-[10px] font-mono uppercase text-zinc-700">
+                            {normalizeCountryCode(prospect.pays)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          Sans contact depuis{' '}
+                          <strong className="text-zinc-800">{elapsed} j</strong>{' '}
+                          • {formatEur(prospect.valeur_estimee_eur)}
+                        </div>
                       </div>
                     </div>
 
@@ -759,7 +1126,6 @@ export default function CockpitPage() {
           </div>
         </section>
 
-        {/* Deadlines Commandes (< 48h) */}
         <section className="glass-card p-5">
           <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-stone-100">
             <div className="flex items-center gap-2.5">
@@ -831,6 +1197,192 @@ export default function CockpitPage() {
           </div>
         </section>
       </div>
+
+      {/* Modal: Edit Rich Idea */}
+      {editingIdea && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+          <div className="glass-card w-full max-w-lg p-5 sm:p-6 border border-stone-200 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+              <h3 className="text-base font-semibold text-zinc-900">
+                Modifier l’idée
+              </h3>
+              <button
+                onClick={() => setEditingIdea(null)}
+                className="rounded-lg p-1 text-zinc-400 hover:text-zinc-800"
+              >
+                <X className="h-5 w-5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedIdea} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Titre de l’idée *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editIdeaTitle}
+                  onChange={(e) => setEditIdeaTitle(e.target.value)}
+                  className="glass-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Description complète
+                </label>
+                <textarea
+                  rows={4}
+                  value={editIdeaDesc}
+                  onChange={(e) => setEditIdeaDesc(e.target.value)}
+                  className="glass-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                  Liens attachés
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={editIdeaLinkInput}
+                    onChange={(e) => setEditIdeaLinkInput(e.target.value)}
+                    placeholder="https://..."
+                    className="glass-input flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editIdeaLinkInput.trim()) return;
+                      setEditIdeaLinks((prev) => [
+                        ...prev,
+                        editIdeaLinkInput.trim(),
+                      ]);
+                      setEditIdeaLinkInput('');
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    + Lien
+                  </button>
+                </div>
+                {editIdeaLinks.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {editIdeaLinks.map((lnk, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 rounded-lg bg-stone-100 border border-stone-200 px-2.5 py-1 text-xs text-zinc-700"
+                      >
+                        <span className="truncate max-w-[200px]">{lnk}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditIdeaLinks((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="text-zinc-400 hover:text-red-600"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <input
+                  ref={editIdeaPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleAddIdeaPhoto(e.target.files, true)}
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-zinc-700">
+                    Photos ({editIdeaPhotos.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => editIdeaPhotoInputRef.current?.click()}
+                    className="btn-secondary py-1 px-2.5 text-xs"
+                  >
+                    + Ajouter photo
+                  </button>
+                </div>
+                {editIdeaPhotos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {editIdeaPhotos.map((ph, idx) => (
+                      <div
+                        key={idx}
+                        className="relative h-14 w-14 rounded-lg overflow-hidden border border-stone-200"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={ph}
+                          alt="Photo idée"
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditIdeaPhotos((prev) =>
+                              prev.filter((_, i) => i !== idx)
+                            )
+                          }
+                          className="absolute top-0.5 right-0.5 rounded-full bg-zinc-900/70 p-0.5 text-white"
+                        >
+                          <X className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingIdea(null)}
+                  className="btn-secondary"
+                >
+                  Annuler
+                </button>
+                <button type="submit" className="btn-primary">
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Idea Photo Preview */}
+      {previewPhoto && (
+        <div
+          onClick={() => setPreviewPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/70 backdrop-blur-sm p-4"
+        >
+          <div className="relative max-w-3xl max-h-[85vh] rounded-2xl overflow-hidden bg-white p-2 shadow-2xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewPhoto}
+              alt="Aperçu plein écran"
+              className="max-h-[80vh] w-auto object-contain rounded-xl"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+              className="absolute top-4 right-4 rounded-full bg-zinc-900/80 p-2 text-white"
+            >
+              <X className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

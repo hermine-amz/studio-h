@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -10,11 +10,17 @@ import {
   Sparkles,
   Wallet,
   LogOut,
+  RefreshCw,
+  Copy,
+  Check,
+  Database,
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { StudioHLogo } from '@/components/brand/StudioHLogo';
 import { cn } from '@/lib/currency';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { useStudioData } from '@/context/StudioDataContext';
+import { useToast } from '@/context/ToastContext';
 
 const MOBILE_NAV = [
   { label: 'Cockpit', href: '/', icon: LayoutDashboard },
@@ -24,9 +30,23 @@ const MOBILE_NAV = [
   { label: 'Finances', href: '/finances', icon: Wallet },
 ];
 
+const RLS_UNLOCK_SQL = `ALTER TABLE prospects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE commandes_ugc DISABLE ROW LEVEL SECURITY;
+ALTER TABLE medias_creations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE prompts_scripts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE finances DISABLE ROW LEVEL SECURITY;
+ALTER TABLE focus_taches DISABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;`;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { rlsBlocked, refreshAllData } = useStudioData();
+  const { toast } = useToast();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   if (pathname === '/login') {
     return <>{children}</>;
@@ -47,6 +67,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.refresh();
   };
 
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await refreshAllData();
+    setIsSyncing(false);
+    toast({
+      title: 'Synchronisation Cloud effectuée',
+      description: 'Données actualisées depuis Supabase.',
+    });
+  };
+
+  const handleCopyUnlockSql = async () => {
+    try {
+      await navigator.clipboard.writeText(RLS_UNLOCK_SQL);
+      setCopiedSql(true);
+      toast({
+        title: 'Script SQL de synchronisation copié',
+        description:
+          'Collez-le dans Supabase > SQL Editor > Run pour synchroniser votre PC et votre téléphone.',
+      });
+      setTimeout(() => setCopiedSql(false), 3000);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F8F9FA] text-zinc-900 relative selection:bg-[#FFF8B9] selection:text-zinc-900">
       <Sidebar />
@@ -57,9 +102,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <StudioHLogo size="sm" />
         </Link>
         <div className="flex items-center gap-2">
-          <span className="rounded-md bg-stone-100 border border-stone-200 px-2 py-0.5 text-[11px] font-mono text-zinc-600">
-            1 € = 655,957
-          </span>
+          <button
+            onClick={handleManualSync}
+            className="inline-flex items-center gap-1 rounded-lg bg-stone-100 hover:bg-stone-200 border border-stone-200 px-2.5 py-1.5 text-xs font-medium text-zinc-700"
+            title="Synchroniser avec Supabase"
+          >
+            <RefreshCw
+              className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')}
+              strokeWidth={1.5}
+            />
+            <span>Sync</span>
+          </button>
           <button
             onClick={handleLogout}
             className="rounded-lg bg-stone-100 hover:bg-stone-200 border border-stone-200 p-2 text-zinc-700"
@@ -72,7 +125,45 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Balanced Main Content Area */}
       <main className="relative z-10 lg:pl-60 w-full max-w-full overflow-x-hidden pb-24 lg:pb-8">
-        <div className="max-w-[1360px] w-full mx-auto px-3.5 sm:px-7 py-5 sm:py-6 overflow-x-hidden">
+        <div className="max-w-[1360px] w-full mx-auto px-3.5 sm:px-7 py-5 sm:py-6 overflow-x-hidden space-y-4">
+          {rlsBlocked && (
+            <div className="rounded-2xl bg-[#FFF8B9]/65 border border-[#568203]/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Database
+                  className="h-5 w-5 text-[#568203] shrink-0 mt-0.5"
+                  strokeWidth={1.5}
+                />
+                <div className="text-xs text-zinc-800 space-y-0.5">
+                  <p className="font-semibold text-zinc-900">
+                    Synchronisation PC & Téléphone : débloquez l’écriture Supabase (RLS)
+                  </p>
+                  <p className="text-zinc-600">
+                    Supabase bloque actuellement l’écriture cloud (erreur RLS 42501). Copiez ce script SQL et cliquez sur « Run » dans Supabase &gt; SQL Editor pour que votre PC et votre téléphone se synchronisent en direct.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyUnlockSql}
+                  className="btn-primary py-1.5 px-3 text-xs"
+                >
+                  {copiedSql ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span>SQL Copié</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <span>Copier le SQL de synchro</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {children}
         </div>
       </main>

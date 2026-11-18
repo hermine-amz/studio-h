@@ -41,6 +41,7 @@ export interface Prospect {
   id: string;
   nom_marque: string;
   pays: string;
+  logo_url?: string | null;
   contact_nom: string | null;
   contact_email: string | null;
   contact_telephone?: string | null;
@@ -61,6 +62,8 @@ export interface CommandeUgc {
   prospect_id: string;
   nom_pack: string;
   brief_produit: string | null;
+  liens_reference?: string[];
+  photos_reference?: string[];
   statut_production: StatutProduction;
   montant_eur: number;
   statut_paiement: StatutPaiement;
@@ -104,6 +107,10 @@ export interface FocusTache {
   id: string;
   type: TypeFocusTache;
   contenu: string;
+  titre?: string;
+  description?: string;
+  liens?: string[];
+  photos?: string[];
   urgence?: UrgenceNiveau;
   est_termine: boolean;
   created_at: string;

@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CheckCircle2,
+  Calendar,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -18,6 +19,27 @@ import type { TypeFinance } from '@/types/database';
 import { formatEur, formatFcfa } from '@/lib/currency';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
+
+type PeriodFilter =
+  | 'jour'
+  | 'semaine'
+  | 'mois'
+  | '30j'
+  | '90j'
+  | 'annee'
+  | 'tout'
+  | 'custom';
+
+const PERIOD_OPTIONS: { id: PeriodFilter; label: string }[] = [
+  { id: 'jour', label: "Aujourd'hui" },
+  { id: 'semaine', label: 'Cette semaine' },
+  { id: 'mois', label: 'Ce mois' },
+  { id: '30j', label: '30 jours' },
+  { id: '90j', label: '90 jours' },
+  { id: 'annee', label: 'Cette année' },
+  { id: 'tout', label: 'Depuis le début' },
+  { id: 'custom', label: 'Calendrier personnalisé' },
+];
 
 export default function FinancesPage() {
   const {
@@ -31,12 +53,68 @@ export default function FinancesPage() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
+  const [period, setPeriod] = useState<PeriodFilter>('tout');
+  const [customStart, setCustomStart] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [customEnd, setCustomEnd] = useState<string>(
+    () => new Date().toISOString().split('T')[0]
+  );
+
+  // Quick Form State
   const [type, setType] = useState<TypeFinance>('Dépense');
   const [libelle, setLibelle] = useState('');
   const [montantEur, setMontantEur] = useState('');
   const [dateTransaction, setDateTransaction] = useState(
     new Date().toISOString().split('T')[0]
   );
+
+  const isDateInSelectedPeriod = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    // Start of week (Monday)
+    const dayOfWeek = now.getDay() || 7;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek + 1);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Start of month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // 30 days ago & 90 days ago
+    const days30Ago = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    days30Ago.setHours(0, 0, 0, 0);
+    const days90Ago = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    days90Ago.setHours(0, 0, 0, 0);
+
+    // Start of year
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    return (dateStr: string): boolean => {
+      if (!dateStr) return true;
+      const cleanDate = dateStr.split('T')[0];
+      if (period === 'tout') return true;
+      if (period === 'jour') return cleanDate === todayStr;
+
+      const d = new Date(`${cleanDate}T12:00:00`);
+      if (isNaN(d.getTime())) return true;
+
+      if (period === 'semaine') return d >= startOfWeek;
+      if (period === 'mois') return d >= startOfMonth;
+      if (period === '30j') return d >= days30Ago;
+      if (period === '90j') return d >= days90Ago;
+      if (period === 'annee') return d >= startOfYear;
+      if (period === 'custom') {
+        if (customStart && cleanDate < customStart) return false;
+        if (customEnd && cleanDate > customEnd) return false;
+        return true;
+      }
+      return true;
+    };
+  }, [period, customStart, customEnd]);
 
   const manualRevenus = useMemo(
     () => finances.filter((f) => f.type === 'Revenu'),
@@ -69,15 +147,24 @@ export default function FinancesPage() {
     return [
       ...manualRevenus.map((r) => ({ ...r, isSyncedOrder: false })),
       ...syncedFromOrders,
-    ].sort((a, b) => b.date_transaction.localeCompare(a.date_transaction));
-  }, [manualRevenus, paidOrdersNotInFinances, prospects]);
+    ]
+      .filter((item) => isDateInSelectedPeriod(item.date_transaction))
+      .sort((a, b) => b.date_transaction.localeCompare(a.date_transaction));
+  }, [
+    manualRevenus,
+    paidOrdersNotInFinances,
+    prospects,
+    isDateInSelectedPeriod,
+  ]);
 
   const depenses = useMemo(
     () =>
       finances
-        .filter((f) => f.type === 'Dépense')
+        .filter(
+          (f) => f.type === 'Dépense' && isDateInSelectedPeriod(f.date_transaction)
+        )
         .sort((a, b) => b.date_transaction.localeCompare(a.date_transaction)),
-    [finances]
+    [finances, isDateInSelectedPeriod]
   );
 
   const totalRevenusEur = useMemo(
@@ -155,13 +242,66 @@ export default function FinancesPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-          Vue 06 — Pilotage Financier Bimonétaire (EUR / XOF)
-        </span>
-        <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
-          Trésorerie & Rentabilité
-        </h1>
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+            Vue 06 — Pilotage Financier Bimonétaire (EUR / XOF)
+          </span>
+          <h1 className="mt-0.5 text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
+            Trésorerie & Rentabilité
+          </h1>
+        </div>
+      </div>
+
+      {/* Period Filter Bar (Jour, Semaine, Mois, 30j, 90j, Cette année, Depuis le début, Calendrier personnalisé) */}
+      <div className="glass-card p-3.5 space-y-3">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <Calendar
+            className="h-4 w-4 text-[#568203] shrink-0 ml-1 mr-1"
+            strokeWidth={1.5}
+          />
+          {PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setPeriod(opt.id)}
+              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-all shrink-0 border ${
+                period === opt.id
+                  ? 'bg-[#568203] text-white border-[#568203] shadow-sm'
+                  : 'bg-stone-50 text-zinc-600 border-stone-200 hover:bg-stone-100'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {period === 'custom' && (
+          <div className="pt-3 border-t border-stone-200/80 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-zinc-600">Du :</label>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="glass-input w-40 py-1.5"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-zinc-600">Au :</label>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="glass-input w-40 py-1.5"
+              />
+            </div>
+            <span className="text-xs text-zinc-500">
+              Période personnalisée active ({combinedRevenus.length} revenus,{' '}
+              {depenses.length} dépenses)
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 1. Three Synthesis KPI Cards */}
@@ -169,7 +309,7 @@ export default function FinancesPage() {
         <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-              Revenus Totaux Encaissés
+              Revenus Encaissés ({PERIOD_OPTIONS.find((p) => p.id === period)?.label})
             </span>
             <div className="rounded-xl bg-[#FFF8B9]/70 border border-[#568203]/25 p-2">
               <TrendingUp
@@ -180,14 +320,14 @@ export default function FinancesPage() {
           </div>
           <CurrencyDisplay amountEur={totalRevenusEur} size="xl" />
           <p className="text-xs text-zinc-500">
-            Inclut les factures encaissées et commandes payées
+            Inclut les factures encaissées et commandes payées sur la période
           </p>
         </div>
 
         <div className="glass-card p-5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-              Dépenses Totales (Outils IA & Infra)
+              Dépenses Totales ({PERIOD_OPTIONS.find((p) => p.id === period)?.label})
             </span>
             <div className="rounded-xl bg-stone-100 border border-stone-200 p-2">
               <TrendingDown
@@ -198,7 +338,7 @@ export default function FinancesPage() {
           </div>
           <CurrencyDisplay amountEur={totalDepensesEur} size="xl" />
           <p className="text-xs text-zinc-500">
-            Abonnements ElevenLabs, Runway, Kling, Midjourney, Cloud
+            Abonnements outils IA & charges sur la période sélectionnée
           </p>
         </div>
 
@@ -213,7 +353,7 @@ export default function FinancesPage() {
           </div>
           <CurrencyDisplay amountEur={beneficeNetEur} size="xl" />
           <p className="text-xs text-zinc-600">
-            Marge nette disponible (1 € = 655,957 FCFA)
+            Marge nette sur la période (1 € = 655,957 FCFA)
           </p>
         </div>
       </div>
@@ -322,7 +462,7 @@ export default function FinancesPage() {
           <div className="space-y-2">
             {combinedRevenus.length === 0 ? (
               <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
-                Aucun revenu encaissé enregistré.
+                Aucun revenu encaissé sur cette période.
               </div>
             ) : (
               combinedRevenus.map((rev) => (
@@ -402,7 +542,7 @@ export default function FinancesPage() {
           <div className="space-y-2">
             {depenses.length === 0 ? (
               <div className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-xs text-zinc-500">
-                Aucune dépense enregistrée.
+                Aucune dépense enregistrée sur cette période.
               </div>
             ) : (
               depenses.map((dep) => (
