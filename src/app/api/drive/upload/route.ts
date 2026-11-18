@@ -1,108 +1,153 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createDriveFolder, uploadFileToDrive } from '@/lib/google-drive';
 import {
-  createServerSupabase,
-  isServerSupabaseConfigured,
-} from '@/lib/supabase/server';
+  createDriveFolder,
+  deleteDriveFile,
+  uploadFileToDrive,
+} from '@/lib/google-drive';
+import { requireStudioAdmin } from '@/lib/supabase/admin';
 import type { TypeMedia } from '@/types/database';
 
+export const runtime = 'nodejs';
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const ALLOWED_TYPES: Record<string, { type: TypeMedia; extensions: string[] }> = {
+  'image/jpeg': { type: 'image', extensions: ['jpg', 'jpeg'] },
+  'image/png': { type: 'image', extensions: ['png'] },
+  'image/webp': { type: 'image', extensions: ['webp'] },
+  'image/gif': { type: 'image', extensions: ['gif'] },
+  'video/mp4': { type: 'video', extensions: ['mp4'] },
+  'video/quicktime': { type: 'video', extensions: ['mov'] },
+  'video/webm': { type: 'video', extensions: ['webm'] },
+};
+
+function safeFileName(name: string): string {
+  const leaf = name.split(/[\\/]/).pop() || 'media';
+  return leaf.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 180) || 'media';
+}
+
+function safeFolderPart(value: string): string {
+  return value.normalize('NFKC').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'Client';
+}
+
 export async function POST(request: NextRequest) {
+  const auth = await requireStudioAdmin();
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  let uploadedFileId: string | null = null;
+
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const commandeId = formData.get('commandeId') as string | null;
-    const nomPack = (formData.get('nomPack') as string | null) || 'Pack_UGC';
-    const nomMarque = (formData.get('nomMarque') as string | null) || 'Client';
-    let driveSubfolderId = formData.get('driveSubfolderId') as string | null;
-    const driveParentFolderId = formData.get('driveParentFolderId') as
-      | string
-      | null;
+    const fileEntry = formData.get('file');
+    const commandeId = formData.get('commandeId');
 
-    if (!file || !commandeId) {
+    if (!(fileEntry instanceof File) || typeof commandeId !== 'string') {
       return NextResponse.json(
         { error: 'Fichier et identifiant de commande requis.' },
         { status: 400 }
       );
     }
 
-    // 1. Ensure order Drive subfolder exists
-    if (!driveSubfolderId) {
-      const cleanFolderName = `Commande_${nomMarque.replace(/\s+/g, '_')}_${nomPack.replace(/\s+/g, '_')}`;
-      const folderResult = await createDriveFolder(
-        cleanFolderName,
-        driveParentFolderId || undefined
-      );
-      driveSubfolderId = folderResult.folderId;
-
-      if (isServerSupabaseConfigured()) {
-        const supabase = createServerSupabase();
-        await supabase
-          .from('commandes_ugc')
-          .update({ drive_subfolder_id: driveSubfolderId })
-          .eq('id', commandeId);
-      }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(commandeId)) {
+      return NextResponse.json({ error: 'Identifiant de commande invalide.' }, { status: 400 });
     }
 
-    // 2. Determine media type ('video' or 'image')
-    const mimeType = file.type || 'application/octet-stream';
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isVideo =
-      mimeType.startsWith('video/') || ['mp4', 'mov', 'webm', 'm4v'].includes(ext);
-    const typeMedia: TypeMedia = isVideo ? 'video' : 'image';
+    if (fileEntry.size <= 0 || fileEntry.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'Le fichier doit peser entre 1 octet et 100 Mo.' },
+        { status: 413 }
+      );
+    }
 
-    // 3. Upload file to Google Drive
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const fileName = safeFileName(fileEntry.name);
+    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+    const mime = fileEntry.type.toLowerCase();
+    const allowed = ALLOWED_TYPES[mime];
+    if (!allowed || !allowed.extensions.includes(extension)) {
+      return NextResponse.json(
+        { error: 'Format non autorisé. Formats acceptés : JPG, PNG, WEBP, GIF, MP4, MOV et WEBM.' },
+        { status: 415 }
+      );
+    }
 
-    const uploadResult = await uploadFileToDrive({
-      fileName: file.name,
-      mimeType,
+    const { data: commande, error: orderError } = await auth.supabase
+      .from('commandes_ugc')
+      .select('id, prospect_id, nom_pack, drive_subfolder_id')
+      .eq('id', commandeId)
+      .maybeSingle();
+
+    if (orderError) throw orderError;
+    if (!commande) {
+      return NextResponse.json({ error: 'Commande introuvable.' }, { status: 404 });
+    }
+
+    const { data: prospect, error: prospectError } = await auth.supabase
+      .from('prospects')
+      .select('nom_marque')
+      .eq('id', commande.prospect_id)
+      .maybeSingle();
+
+    if (prospectError) throw prospectError;
+    const brandName = prospect?.nom_marque || 'Client';
+
+    let folderId = commande.drive_subfolder_id;
+    if (!folderId) {
+      const folder = await createDriveFolder(
+        'Commande_' + safeFolderPart(brandName) + '_' + safeFolderPart(commande.nom_pack)
+      );
+      folderId = folder.folderId;
+
+      const { error: folderUpdateError } = await auth.supabase
+        .from('commandes_ugc')
+        .update({ drive_subfolder_id: folderId })
+        .eq('id', commandeId);
+      if (folderUpdateError) throw folderUpdateError;
+    }
+
+    const buffer = Buffer.from(await fileEntry.arrayBuffer());
+    const uploaded = await uploadFileToDrive({
+      fileName,
+      mimeType: mime,
       buffer,
-      folderId: driveSubfolderId,
+      folderId,
     });
+    uploadedFileId = uploaded.fileId;
 
-    // 4. Record in Supabase medias_creations if configured
-    let mediaRecord = {
-      id: crypto.randomUUID(),
-      commande_id: commandeId,
-      nom_fichier: file.name,
-      type_media: typeMedia,
-      drive_file_id: uploadResult.fileId,
-      pret_pour_livraison: false,
-      created_at: new Date().toISOString(),
-    };
+    const { data: media, error: mediaError } = await auth.supabase
+      .from('medias_creations')
+      .insert({
+        commande_id: commandeId,
+        nom_fichier: fileName,
+        type_media: allowed.type,
+        drive_file_id: uploaded.fileId,
+        pret_pour_livraison: false,
+      })
+      .select('*')
+      .single();
 
-    if (isServerSupabaseConfigured()) {
-      const supabase = createServerSupabase();
-      const { data, error } = await supabase
-        .from('medias_creations')
-        .insert({
-          commande_id: commandeId,
-          nom_fichier: file.name,
-          type_media: typeMedia,
-          drive_file_id: uploadResult.fileId,
-          pret_pour_livraison: false,
-        })
-        .select('*')
-        .single();
-
-      if (!error && data) {
-        mediaRecord = data;
-      }
+    if (mediaError || !media) {
+      throw mediaError || new Error('Impossible d’enregistrer le média dans Studio H.');
     }
 
     return NextResponse.json({
       success: true,
-      media: mediaRecord,
-      driveSubfolderId,
-      simulated: uploadResult.simulated,
+      media,
+      driveSubfolderId: folderId,
+      simulated: uploaded.simulated,
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Erreur lors de l'envoi du média vers Google Drive.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (uploadedFileId) {
+      try {
+        await deleteDriveFile(uploadedFileId);
+      } catch {
+        // Keep the original failure; the orphaned Drive file can be cleaned up manually.
+      }
+    }
+    console.error('[drive/upload]', error);
+    return NextResponse.json(
+      { error: 'Échec de l’envoi du média. Vérifie le fichier et réessaie.' },
+      { status: 500 }
+    );
   }
 }
-
