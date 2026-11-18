@@ -6,8 +6,8 @@ export function isServerSupabaseConfigured(): boolean {
   return isSupabaseConfigured();
 }
 
-export function createServerSupabase() {
-  const cookieStore = cookies();
+export async function createServerSupabase() {
+  const cookieStore = await cookies();
   const { url, key } = getSupabaseCredentials();
 
   return createServerClient(url, key, {

@@ -7,7 +7,7 @@ export async function requireStudioAdmin() {
   }
 
   try {
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user || user.email?.toLowerCase() !== adminEmail) {
       return { authorized: false as const, status: 401, error: 'Authentification requise.' };
