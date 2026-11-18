@@ -27,7 +27,7 @@ revoke all on table
   public.prompts_scripts,
   public.finances,
   public.focus_taches
-from anon;
+from anon, authenticated, public;
 
 grant select, insert, update, delete on table
   public.prospects,
