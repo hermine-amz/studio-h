@@ -1,38 +1,62 @@
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isApiRoute = pathname.startsWith('/api/');
 
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const adminEmail = process.env.STUDIO_H_ADMIN_EMAIL?.trim().toLowerCase();
 
-  // Fast 0ms synchronous cookie check (no blocking remote HTTP call on page reload)
-  const localAuthCookie = request.cookies.get('studio_h_session')?.value;
-  const hasSupabaseCookie = request.cookies
-    .getAll()
-    .some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'));
-
-  const isAuthenticated =
-    localAuthCookie === 'authenticated' || hasSupabaseCookie;
-
-  if (!isAuthenticated && pathname !== '/login') {
+  if (!supabaseUrl || !supabaseAnonKey || !adminEmail) {
+    if (isApiRoute) {
+      return NextResponse.json(
+        { error: 'Service temporairement indisponible.' },
+        { status: 503 }
+      );
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthenticated && pathname === '/login') {
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+  const isAdmin = !error && user?.email?.toLowerCase() === adminEmail;
+
+  if (isApiRoute && !isAdmin) {
+    return NextResponse.json({ error: 'Authentification requise.' }, { status: 401 });
+  }
+
+  if (!isApiRoute && !isAdmin && pathname !== '/login') {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (!isApiRoute && isAdmin && pathname === '/login') {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = '/';
     return NextResponse.redirect(dashboardUrl);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
