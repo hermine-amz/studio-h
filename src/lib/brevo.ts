@@ -1,3 +1,16 @@
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[character];
+  });
+}
+
 export function isBrevoConfigured(): boolean {
   const apiKey = process.env.BREVO_API_KEY;
   const sender = process.env.BREVO_SENDER_EMAIL;
@@ -38,6 +51,10 @@ export async function sendBrevoDeliveryEmail(
     };
   }
 
+  const safeToName = escapeHtml(toName || brandName);
+  const safeBrandName = escapeHtml(brandName);
+  const safePackName = escapeHtml(packName);
+  const safeDeliveryLink = escapeHtml(deliveryLink);
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'contact@studio-h.eu';
   const apiKey = process.env.BREVO_API_KEY!;
 
@@ -46,17 +63,17 @@ export async function sendBrevoDeliveryEmail(
       <div style="border-bottom: 1px solid rgba(255, 248, 185, 0.15); padding-bottom: 20px; margin-bottom: 28px;">
         <span style="display: inline-block; background-color: #568203; color: #FFF8B9; padding: 6px 12px; border-radius: 6px; font-weight: 700; letter-spacing: 0.08em; font-size: 13px;">STUDIO H</span>
         <h1 style="margin: 16px 0 4px 0; font-size: 22px; color: #FFF8B9; font-weight: 600;">Livraison de vos créations publicitaires IA & UGC</h1>
-        <p style="margin: 0; color: rgba(255, 248, 185, 0.75); font-size: 14px;">Marque : ${brandName} — Pack : ${packName}</p>
+        <p style="margin: 0; color: rgba(255, 248, 185, 0.75); font-size: 14px;">Marque : ${safeBrandName} — Pack : ${safePackName}</p>
       </div>
-      <p style="font-size: 15px; line-height: 1.6; color: #FFF8B9;">Bonjour ${toName || brandName},</p>
+      <p style="font-size: 15px; line-height: 1.6; color: #FFF8B9;">Bonjour ${safeToName},</p>
       <p style="font-size: 15px; line-height: 1.6; color: rgba(255, 248, 185, 0.88);">
-        La production de votre pack <strong>${packName}</strong> (${creationsCount} création${creationsCount > 1 ? 's' : ''} contrôlée${creationsCount > 1 ? 's' : ''} et validée${creationsCount > 1 ? 's' : ''}) est désormais terminée.
+        La production de votre pack <strong>${safePackName}</strong> (${creationsCount} création${creationsCount > 1 ? 's' : ''} contrôlée${creationsCount > 1 ? 's' : ''} et validée${creationsCount > 1 ? 's' : ''}) est désormais terminée.
       </p>
       <p style="font-size: 15px; line-height: 1.6; color: rgba(255, 248, 185, 0.88);">
         Vous pouvez visionner et télécharger l'ensemble de vos fichiers haute définition directement via votre dossier sécurisé ci-dessous :
       </p>
       <div style="margin: 32px 0; text-align: center;">
-        <a href="${deliveryLink}" style="background-color: #568203; color: #FFF8B9; text-decoration: none; padding: 14px 28px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid rgba(255, 248, 185, 0.35); display: inline-block;">
+        <a href="${safeDeliveryLink}" style="background-color: #568203; color: #FFF8B9; text-decoration: none; padding: 14px 28px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid rgba(255, 248, 185, 0.35); display: inline-block;">
           Accéder aux fichiers livrés
         </a>
       </div>
