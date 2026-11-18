@@ -13,6 +13,7 @@ import {
   Calendar,
   PieChart,
   Tag,
+  ChevronDown,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -107,6 +108,7 @@ export default function FinancesPage() {
   const [depPageSize, setDepPageSize] = useState(10);
 
   // Quick Form State
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [type, setType] = useState<TypeFinance>('Dépense');
   const [categorieDepense, setCategorieDepense] =
     useState<CategorieDepense>('Vidéo IA');
@@ -491,15 +493,58 @@ export default function FinancesPage() {
         </div>
       </section>
 
-      {/* 2. Quick Add Transaction Form (with Expense Category) */}
+      {/* 2. Quick Add Transaction Form (Collapsible, with Expense Category) */}
       <section className="glass-card p-5">
-        <h2 className="text-[15px] font-semibold text-zinc-900 mb-3.5">
-          Ajouter rapidement un Revenu ou une Dépense
-        </h2>
-        <form
-          onSubmit={handleAddTransaction}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
+        <div
+          onClick={() => setIsQuickAddOpen((prev) => !prev)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsQuickAddOpen((prev) => !prev);
+            }
+          }}
+          className={`flex items-center justify-between gap-3 cursor-pointer select-none ${
+            isQuickAddOpen ? 'mb-3.5 pb-3 border-b border-stone-200/80' : ''
+          }`}
         >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 p-2 shrink-0">
+              <Plus className="h-4 w-4 text-[#568203]" strokeWidth={1.5} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-semibold text-zinc-900 truncate">
+                Ajouter rapidement un Revenu ou une Dépense
+              </h2>
+              <p className="text-xs text-zinc-500 truncate">
+                Saisie rapide d’abonnement outil IA, charge ou encaissement manuel
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsQuickAddOpen((prev) => !prev);
+            }}
+            className="btn-secondary py-1.5 px-2.5 text-xs shrink-0"
+            aria-expanded={isQuickAddOpen}
+          >
+            <span>{isQuickAddOpen ? 'Réduire' : 'Ouvrir'}</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                isQuickAddOpen ? 'rotate-180' : ''
+              }`}
+              strokeWidth={1.5}
+            />
+          </button>
+        </div>
+        {isQuickAddOpen && (
+          <form
+            onSubmit={handleAddTransaction}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
+          >
           <div className="lg:col-span-2">
             <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Type
@@ -595,7 +640,8 @@ export default function FinancesPage() {
               <span className="lg:hidden">Enregistrer</span>
             </button>
           </div>
-        </form>
+          </form>
+        )}
       </section>
 
       {/* 3. Double Table: Revenues & Categorized Recurring AI Expenses */}

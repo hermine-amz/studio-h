@@ -29,6 +29,7 @@ import {
   Layers,
   Link2,
   X,
+  ChevronDown,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -220,6 +221,7 @@ function Client360Content() {
   const [isCreatingSub, setIsCreatingSub] = useState(false);
 
   // New Product Form State
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [newProdName, setNewProdName] = useState('');
   const [newProdLink, setNewProdLink] = useState('');
   const [newProdAdInput, setNewProdAdInput] = useState('');
@@ -1287,35 +1289,75 @@ function Client360Content() {
       {/* ================= ONGLET 2 : CATALOGUE PRODUITS (LIER LIENS, IMAGES, PUBS, DRIVE & CRÉAS PAR PRODUIT) ================= */}
       {activeTab === 'produits' && (
         <div className="space-y-5">
-          {/* Add Product Form */}
+          {/* Add Product Form (Collapsible) */}
           <form
             onSubmit={handleCreateProduct}
             className="glass-card p-5 space-y-4"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
-              <div className="flex items-center gap-2.5">
-                <div className="rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 p-2">
+            <div
+              onClick={() => setIsAddProductOpen((prev) => !prev)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsAddProductOpen((prev) => !prev);
+                }
+              }}
+              className={`flex items-center justify-between gap-3 cursor-pointer select-none ${
+                isAddProductOpen ? 'pb-3 border-b border-stone-200/80' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 p-2 shrink-0">
                   <ShoppingBag
                     className="h-4 w-4 text-[#568203]"
                     strokeWidth={1.5}
                   />
                 </div>
-                <div>
-                  <h2 className="text-[15px] font-semibold text-zinc-900">
+                <div className="min-w-0">
+                  <h2 className="text-[15px] font-semibold text-zinc-900 truncate">
                     Ajouter un Produit au Catalogue de {client.nom_marque}
                   </h2>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-500 truncate">
                     Centralisez les liens, photos packshot, pubs FB, dossier Drive et créas pour chaque produit
                   </p>
                 </div>
               </div>
-              <button type="submit" className="btn-primary">
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
-                <span>Ajouter le produit</span>
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {isAddProductOpen && (
+                  <button
+                    type="submit"
+                    onClick={(e) => e.stopPropagation()}
+                    className="btn-primary"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={1.5} />
+                    <span>Ajouter le produit</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAddProductOpen((prev) => !prev);
+                  }}
+                  className="btn-secondary py-1.5 px-2.5 text-xs"
+                  aria-expanded={isAddProductOpen}
+                >
+                  <span>{isAddProductOpen ? 'Réduire' : 'Ouvrir'}</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                      isAddProductOpen ? 'rotate-180' : ''
+                    }`}
+                    strokeWidth={1.5}
+                  />
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {isAddProductOpen && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-medium text-zinc-700 mb-1">
                   Nom du Produit *
@@ -1462,6 +1504,8 @@ function Client360Content() {
                 className="glass-input"
               />
             </div>
+              </>
+            )}
           </form>
 
           {/* Products List */}
