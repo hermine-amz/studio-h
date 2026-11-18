@@ -7,7 +7,7 @@ begin;
 
 do $$
 begin
-  if '__STUDIO_H_ADMIN_EMAIL__' = '__STUDIO_H_ADMIN_EMAIL__' then
+  if '__STUDIO_H_ADMIN_EMAIL__' = 'REPLACE_WITH_ADMIN_EMAIL' then
     raise exception 'Replace __STUDIO_H_ADMIN_EMAIL__ before applying this migration';
   end if;
 end
