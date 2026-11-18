@@ -61,16 +61,26 @@ CREATE TABLE IF NOT EXISTS finances (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Table Tâches & Idées (Anti-dispersion)
+-- 6. Table Tâches & Idées (10 Tâches avec Niveau d'Urgence)
 CREATE TABLE IF NOT EXISTS focus_taches (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   type TEXT NOT NULL, -- 'tache_jour' ou 'boite_idee'
   contenu TEXT NOT NULL,
+  urgence TEXT DEFAULT 'Normale', -- 'Critique', 'Haute', 'Normale'
   est_termine BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Permissions & Accès API Supabase
+ALTER TABLE focus_taches ADD COLUMN IF NOT EXISTS urgence TEXT DEFAULT 'Normale';
+
+-- 7. Permissions & Accès API Supabase (Désactive le blocage RLS pour votre usage privé)
+ALTER TABLE prospects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE commandes_ugc DISABLE ROW LEVEL SECURITY;
+ALTER TABLE medias_creations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE prompts_scripts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE finances DISABLE ROW LEVEL SECURITY;
+ALTER TABLE focus_taches DISABLE ROW LEVEL SECURITY;
+
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;

@@ -27,6 +27,8 @@ export type TypeFinance = 'Revenu' | 'Dépense';
 
 export type TypeFocusTache = 'tache_jour' | 'boite_idee';
 
+export type UrgenceNiveau = 'Critique' | 'Haute' | 'Normale';
+
 export interface Prospect {
   id: string;
   nom_marque: string;
@@ -90,6 +92,7 @@ export interface FocusTache {
   id: string;
   type: TypeFocusTache;
   contenu: string;
+  urgence?: UrgenceNiveau;
   est_termine: boolean;
   created_at: string;
 }
@@ -100,4 +103,3 @@ export interface DriveSubfolder {
   webViewLink: string;
   createdTime?: string;
 }
-

@@ -136,9 +136,9 @@ export default function PromptsLibraryPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -147,14 +147,14 @@ export default function PromptsLibraryPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[#FFF8B9]/65">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
             Vue 05 — Capital Intellectuel & Ingénierie Créative
           </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-[#FFF8B9]">
+          <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-zinc-900">
             Bibliothèque de Prompts & Scripts
           </h1>
         </div>
@@ -174,8 +174,8 @@ export default function PromptsLibraryPage() {
               onClick={() => setSelectedCategory('ALL')}
               className={`rounded-xl px-3.5 py-2 text-xs font-medium border transition-all shrink-0 ${
                 selectedCategory === 'ALL'
-                  ? 'bg-[#568203] text-[#FFF8B9] border-[#FFF8B9]/35 shadow-glow'
-                  : 'bg-transparent text-[#FFF8B9]/70 border-transparent hover:bg-[#FFF8B9]/10'
+                  ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
+                  : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
               }`}
             >
               Toutes catégories ({prompts.length})
@@ -186,8 +186,8 @@ export default function PromptsLibraryPage() {
                 onClick={() => setSelectedCategory(cat)}
                 className={`rounded-xl px-3.5 py-2 text-xs font-medium border transition-all shrink-0 ${
                   selectedCategory === cat
-                    ? 'bg-[#568203] text-[#FFF8B9] border-[#FFF8B9]/35 shadow-glow'
-                    : 'bg-transparent text-[#FFF8B9]/70 border-transparent hover:bg-[#FFF8B9]/10'
+                    ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
+                    : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
                 }`}
               >
                 {cat}
@@ -199,7 +199,7 @@ export default function PromptsLibraryPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="relative">
               <Search
-                className="h-4 w-4 text-[#FFF8B9]/50 absolute left-3.5 top-3"
+                className="h-4 w-4 text-zinc-400 absolute left-3.5 top-3"
                 strokeWidth={1.5}
               />
               <input
@@ -216,11 +216,11 @@ export default function PromptsLibraryPage() {
               onChange={(e) => setSelectedNiche(e.target.value)}
               className="glass-input sm:w-52"
             >
-              <option value="ALL" className="bg-[#0C0D0E]">
+              <option value="ALL" className="bg-white">
                 Toutes les niches
               </option>
               {allNiches.map((n) => (
-                <option key={n} value={n} className="bg-[#0C0D0E]">
+                <option key={n} value={n} className="bg-white">
                   {n}
                 </option>
               ))}
@@ -231,25 +231,25 @@ export default function PromptsLibraryPage() {
 
       {/* Prompts Grid */}
       {filteredPrompts.length === 0 ? (
-        <div className="glass-card p-12 text-center text-sm text-[#FFF8B9]/65">
+        <div className="glass-card p-12 text-center text-sm text-zinc-500">
           Aucun prompt ou script ne correspond à vos filtres.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {filteredPrompts.map((item) => {
             const isCopied = copiedId === item.id;
             return (
               <div
                 key={item.id}
-                className="glass-card p-6 flex flex-col justify-between space-y-4 hover:border-[#FFF8B9]/40"
+                className="glass-card p-4 flex flex-col justify-between space-y-4 hover:border-[#568203]/45"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-lg bg-[#568203] border border-[#FFF8B9]/30 px-2.5 py-1 text-xs font-medium text-[#FFF8B9]">
+                      <span className="rounded-lg bg-[#568203] border border-[#568203]/30 px-2.5 py-1 text-xs font-medium text-zinc-900">
                         {item.categorie}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-[#FFF8B9]/10 border border-[#FFF8B9]/20 px-2.5 py-1 text-xs text-[#FFF8B9]/80">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-stone-100/80 border border-stone-200 px-2.5 py-1 text-xs text-zinc-700">
                         <Tag className="h-3 w-3" strokeWidth={1.5} />
                         {item.niche}
                       </span>
@@ -258,14 +258,14 @@ export default function PromptsLibraryPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => openEditModal(item)}
-                        className="rounded-lg p-1.5 text-[#FFF8B9]/60 hover:text-[#FFF8B9] hover:bg-[#FFF8B9]/10 transition-colors"
+                        className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100/80 transition-colors"
                         aria-label="Modifier le prompt"
                       >
                         <Pencil className="h-4 w-4" strokeWidth={1.5} />
                       </button>
                       <button
                         onClick={() => deletePrompt(item.id)}
-                        className="rounded-lg p-1.5 text-[#FFF8B9]/60 hover:text-[#FFF8B9] hover:bg-[#FFF8B9]/10 transition-colors"
+                        className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-stone-100/80 transition-colors"
                         aria-label="Supprimer le prompt"
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={1.5} />
@@ -273,17 +273,17 @@ export default function PromptsLibraryPage() {
                     </div>
                   </div>
 
-                  <h3 className="text-base font-semibold text-[#FFF8B9]">
+                  <h3 className="text-base font-semibold text-zinc-900">
                     {item.titre}
                   </h3>
 
-                  <pre className="rounded-xl bg-[#090A0B]/90 border border-[#FFF8B9]/15 p-4 text-xs text-[#FFF8B9]/90 font-mono whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+                  <pre className="rounded-xl bg-stone-50 border border-stone-200/85 p-4 text-xs text-zinc-800 font-mono whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                     {item.contenu_texte}
                   </pre>
                 </div>
 
-                <div className="pt-3 border-t border-[#FFF8B9]/15 flex items-center justify-between">
-                  <span className="text-[11px] text-[#FFF8B9]/55">
+                <div className="pt-3 border-t border-stone-200/85 flex items-center justify-between">
+                  <span className="text-[11px] text-zinc-500">
                     Prêt pour génération IA
                   </span>
                   <button
@@ -311,15 +311,15 @@ export default function PromptsLibraryPage() {
 
       {/* Modal: Add / Edit Prompt */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090A0B]/80 backdrop-blur-md p-4">
-          <div className="glass-card w-full max-w-xl p-6 sm:p-8 border border-[#FFF8B9]/30">
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#FFF8B9]/15">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/35 backdrop-blur-md p-4">
+          <div className="glass-card w-full max-w-xl p-4 sm:p-3.5 border border-[#568203]/30">
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
                 <Sparkles
-                  className="h-5 w-5 text-[#FFF8B9]"
+                  className="h-5 w-5 text-zinc-900"
                   strokeWidth={1.5}
                 />
-                <h2 className="text-lg font-semibold text-[#FFF8B9]">
+                <h2 className="text-lg font-semibold text-zinc-900">
                   {editingPrompt
                     ? 'Modifier le Prompt / Script'
                     : 'Ajouter un Prompt / Script'}
@@ -327,7 +327,7 @@ export default function PromptsLibraryPage() {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-[#FFF8B9]/60 hover:text-[#FFF8B9]"
+                className="rounded-lg p-1 text-zinc-500 hover:text-zinc-900"
               >
                 <X className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -335,7 +335,7 @@ export default function PromptsLibraryPage() {
 
             <form onSubmit={handleSavePrompt} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                   Titre du Prompt ou Script *
                 </label>
                 <input
@@ -350,7 +350,7 @@ export default function PromptsLibraryPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                     Catégorie *
                   </label>
                   <select
@@ -364,7 +364,7 @@ export default function PromptsLibraryPage() {
                       <option
                         key={c}
                         value={c}
-                        className="bg-[#0C0D0E] text-[#FFF8B9]"
+                        className="bg-white text-zinc-900"
                       >
                         {c}
                       </option>
@@ -373,7 +373,7 @@ export default function PromptsLibraryPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                     Niche / Secteur
                   </label>
                   <input
@@ -387,7 +387,7 @@ export default function PromptsLibraryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                   Contenu du Prompt / Script *
                 </label>
                 <textarea
@@ -400,7 +400,7 @@ export default function PromptsLibraryPage() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#FFF8B9]/15">
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-200/85">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

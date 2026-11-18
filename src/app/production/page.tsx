@@ -277,9 +277,9 @@ function ProductionWorkshopContent() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
           <Skeleton className="lg:col-span-4 h-[600px]" />
           <Skeleton className="lg:col-span-8 h-[600px]" />
         </div>
@@ -288,14 +288,14 @@ function ProductionWorkshopContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[#FFF8B9]/65">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
             Vue 04 — Studio Créatif & Livraison Automatisée
           </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-[#FFF8B9]">
+          <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-zinc-900">
             Atelier de Production & Lecteur Média Intégré
           </h1>
         </div>
@@ -315,15 +315,15 @@ function ProductionWorkshopContent() {
       {/* Status Filter Bar */}
       <div className="glass-card p-3.5 flex items-center gap-2 overflow-x-auto">
         <SlidersHorizontal
-          className="h-4 w-4 text-[#FFF8B9]/60 ml-2 mr-1 shrink-0"
+          className="h-4 w-4 text-zinc-500 ml-2 mr-1 shrink-0"
           strokeWidth={1.5}
         />
         <button
           onClick={() => setStatusFilter('ALL')}
           className={`rounded-xl px-3.5 py-2 text-xs font-medium transition-all shrink-0 border ${
             statusFilter === 'ALL'
-              ? 'bg-[#568203] text-[#FFF8B9] border-[#FFF8B9]/35 shadow-glow'
-              : 'bg-transparent text-[#FFF8B9]/70 border-transparent hover:bg-[#FFF8B9]/10'
+              ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
+              : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
           }`}
         >
           Toutes ({commandes.length})
@@ -338,8 +338,8 @@ function ProductionWorkshopContent() {
               onClick={() => setStatusFilter(st)}
               className={`rounded-xl px-3.5 py-2 text-xs font-medium transition-all shrink-0 border ${
                 statusFilter === st
-                  ? 'bg-[#568203] text-[#FFF8B9] border-[#FFF8B9]/35 shadow-glow'
-                  : 'bg-transparent text-[#FFF8B9]/70 border-transparent hover:bg-[#FFF8B9]/10'
+                  ? 'bg-[#568203] text-white border-[#568203]/40 shadow-glow'
+                  : 'bg-transparent text-zinc-600 border-transparent hover:bg-stone-100/80'
               }`}
             >
               {st} ({count})
@@ -349,11 +349,11 @@ function ProductionWorkshopContent() {
       </div>
 
       {/* Master-Detail Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
         {/* Left Column: Orders List */}
         <div className="lg:col-span-4 space-y-3">
           {filteredOrders.length === 0 ? (
-            <div className="glass-card p-8 text-center text-xs text-[#FFF8B9]/65">
+            <div className="glass-card p-8 text-center text-xs text-zinc-500">
               Aucune commande dans ce statut de production.
             </div>
           ) : (
@@ -368,33 +368,33 @@ function ProductionWorkshopContent() {
                 <button
                   key={ord.id}
                   onClick={() => setSelectedOrderId(ord.id)}
-                  className={`w-full text-left rounded-2xl p-4 border transition-all space-y-3 ${
+                  className={`w-full text-left rounded-xl p-4 border transition-all space-y-3 ${
                     isSelected
-                      ? 'bg-[#FFF8B9]/[0.08] border-[#FFF8B9]/50 shadow-glow backdrop-blur-md'
-                      : 'bg-[#FFF8B9]/5 hover:bg-[#FFF8B9]/10 border-[#FFF8B9]/15 backdrop-blur-md'
+                      ? 'bg-[#FFF8B9]/[0.08] border-[#568203] shadow-glow backdrop-blur-md'
+                      : 'bg-stone-50/80 hover:bg-stone-100/80 border-stone-200/85 backdrop-blur-md'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#FFF8B9]/65">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">
                         {client?.nom_marque || 'Client Studio H'}
                       </span>
-                      <h3 className="text-sm font-semibold text-[#FFF8B9] leading-snug mt-0.5">
+                      <h3 className="text-sm font-semibold text-zinc-900 leading-snug mt-0.5">
                         {ord.nom_pack}
                       </h3>
                     </div>
 
-                    <span className="shrink-0 rounded-lg bg-[#568203] border border-[#FFF8B9]/30 px-2.5 py-0.5 text-[11px] font-medium text-[#FFF8B9]">
+                    <span className="shrink-0 rounded-lg bg-[#568203] border border-[#568203]/30 px-2.5 py-0.5 text-[11px] font-medium text-zinc-900">
                       {ord.statut_production}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-[#FFF8B9]/75 pt-2 border-t border-[#FFF8B9]/10">
+                  <div className="flex items-center justify-between text-xs text-zinc-600 pt-2 border-t border-stone-200/70">
                     <div>
-                      <span className="font-semibold text-[#FFF8B9]">
+                      <span className="font-semibold text-zinc-900">
                         {formatEur(ord.montant_eur)}
                       </span>{' '}
-                      <span className="font-mono text-[11px] text-[#FFF8B9]/60">
+                      <span className="font-mono text-[11px] text-zinc-500">
                         ({formatFcfa(ord.montant_eur)})
                       </span>
                     </div>
@@ -409,39 +409,39 @@ function ProductionWorkshopContent() {
         </div>
 
         {/* Right Column: Active Order Detail, Dropzone, Preview & Delivery */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="lg:col-span-8 space-y-4">
           {!activeOrder ? (
-            <div className="glass-card p-12 text-center text-sm text-[#FFF8B9]/70">
+            <div className="glass-card p-12 text-center text-sm text-zinc-600">
               Sélectionnez une commande à gauche pour ouvrir l’atelier de production.
             </div>
           ) : (
-            <div className="glass-card p-6 sm:p-8 space-y-6">
+            <div className="glass-card p-4 sm:p-3.5 space-y-4">
               {/* Order Header & Controls */}
-              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-6 border-b border-[#FFF8B9]/15">
+              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-6 border-b border-stone-200/85">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2.5">
                     {activeClient && (
                       <Link
                         href={`/crm/${activeClient.id}`}
-                        className="rounded-lg bg-[#FFF8B9]/10 hover:bg-[#FFF8B9]/20 border border-[#FFF8B9]/25 px-2.5 py-1 text-xs font-medium text-[#FFF8B9] transition-colors"
+                        className="rounded-lg bg-stone-100/80 hover:bg-[#FFF8B9]/80 border border-stone-300 px-2.5 py-1 text-xs font-medium text-zinc-900 transition-colors"
                       >
                         Client : {activeClient.nom_marque}
                       </Link>
                     )}
                     {activeOrder.date_limite && (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-[#0C0D0E] border border-[#FFF8B9]/20 px-2.5 py-1 text-xs font-mono text-[#FFF8B9]/80">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-white border border-stone-200 px-2.5 py-1 text-xs font-mono text-zinc-700">
                         <Clock className="h-3.5 w-3.5" strokeWidth={1.5} />
                         Deadline : {activeOrder.date_limite}
                       </span>
                     )}
                   </div>
 
-                  <h2 className="text-xl sm:text-2xl font-semibold text-[#FFF8B9]">
+                  <h2 className="text-base sm:text-lg font-semibold text-zinc-900">
                     {activeOrder.nom_pack}
                   </h2>
 
                   {activeOrder.brief_produit && (
-                    <p className="text-sm text-[#FFF8B9]/80 leading-relaxed max-w-2xl">
+                    <p className="text-sm text-zinc-700 leading-relaxed max-w-2xl">
                       {activeOrder.brief_produit}
                     </p>
                   )}
@@ -469,7 +469,7 @@ function ProductionWorkshopContent() {
                         <option
                           key={st}
                           value={st}
-                          className="bg-[#0C0D0E] text-[#FFF8B9]"
+                          className="bg-white text-zinc-900"
                         >
                           {st}
                         </option>
@@ -486,10 +486,10 @@ function ProductionWorkshopContent() {
                       }
                       className="glass-input py-1.5 px-3 text-xs w-auto"
                     >
-                      <option value="En attente" className="bg-[#0C0D0E]">
+                      <option value="En attente" className="bg-white">
                         En attente
                       </option>
-                      <option value="Payé" className="bg-[#0C0D0E]">
+                      <option value="Payé" className="bg-white">
                         Payé
                       </option>
                     </select>
@@ -498,9 +498,9 @@ function ProductionWorkshopContent() {
               </div>
 
               {/* Drive Subfolder & Delivery Action Bar */}
-              <div className="rounded-xl bg-[#FFF8B9]/[0.04] border border-[#FFF8B9]/25 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="rounded-xl bg-[#FFF8B9]/[0.04] border border-stone-300 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-xs font-medium text-[#FFF8B9]">
+                  <div className="flex items-center gap-2 text-xs font-medium text-zinc-900">
                     <Folder className="h-4 w-4" strokeWidth={1.5} />
                     <span>
                       Sous-dossier Google Drive :{' '}
@@ -511,7 +511,7 @@ function ProductionWorkshopContent() {
                     </span>
                   </div>
                   {activeOrder.lien_livraison_public && (
-                    <div className="flex items-center gap-2 text-xs text-[#FFF8B9]/80">
+                    <div className="flex items-center gap-2 text-xs text-zinc-700">
                       <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                       <span>Lien de livraison public actif :</span>
                       <a
@@ -554,10 +554,10 @@ function ProductionWorkshopContent() {
                   handleFilesUpload(e.dataTransfer.files);
                 }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 sm:p-8 text-center transition-all ${
+                className={`cursor-pointer rounded-xl border-2 border-dashed p-4 sm:p-3.5 text-center transition-all ${
                   isDraggingFile
                     ? 'border-[#FFF8B9] bg-[#FFF8B9]/[0.06] shadow-glow'
-                    : 'border-[#FFF8B9]/25 bg-[#0C0D0E]/50 hover:border-[#FFF8B9]/50 hover:bg-[#FFF8B9]/5'
+                    : 'border-stone-300 bg-stone-50/70 hover:border-[#568203] hover:bg-stone-50/80'
                 }`}
               >
                 <input
@@ -568,18 +568,18 @@ function ProductionWorkshopContent() {
                   className="hidden"
                   onChange={(e) => handleFilesUpload(e.target.files)}
                 />
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF8B9]/[0.06] border border-[#FFF8B9]/30">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF8B9]/[0.06] border border-[#568203]/30">
                   <UploadCloud
-                    className="h-6 w-6 text-[#FFF8B9]"
+                    className="h-6 w-6 text-zinc-900"
                     strokeWidth={1.5}
                   />
                 </div>
-                <p className="text-sm font-medium text-[#FFF8B9]">
+                <p className="text-sm font-medium text-zinc-900">
                   {isUploading
                     ? 'Transfert en cours vers le sous-dossier Google Drive...'
                     : 'Glissez-déposez vos créations MP4, MOV, PNG ou JPG ici'}
                 </p>
-                <p className="mt-1 text-xs text-[#FFF8B9]/65">
+                <p className="mt-1 text-xs text-zinc-500">
                   Envoi direct via /api/drive/upload vers Google Drive et indexation dans medias_creations
                 </p>
               </div>
@@ -588,36 +588,36 @@ function ProductionWorkshopContent() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-semibold text-[#FFF8B9]">
+                    <h3 className="text-base font-semibold text-zinc-900">
                       Prévisualisation Privée Intégrée & Contrôle Qualité
                     </h3>
-                    <p className="text-xs text-[#FFF8B9]/65">
+                    <p className="text-xs text-zinc-500">
                       Visionnez vos vidéos et visuels haute définition sans ouvrir Google Drive
                     </p>
                   </div>
-                  <span className="rounded-lg bg-[#FFF8B9]/10 border border-[#FFF8B9]/20 px-3 py-1 text-xs font-mono text-[#FFF8B9]">
+                  <span className="rounded-lg bg-stone-100/80 border border-stone-200 px-3 py-1 text-xs font-mono text-zinc-900">
                     {readyMediasCount} / {orderMedias.length} prêt
                     {readyMediasCount > 1 ? 's' : ''} pour livraison
                   </span>
                 </div>
 
                 {orderMedias.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[#FFF8B9]/15 p-8 text-center text-xs text-[#FFF8B9]/60">
+                  <div className="rounded-xl border border-dashed border-stone-200/85 p-8 text-center text-xs text-zinc-500">
                     Aucun média rattaché à cette commande pour l’instant. Utilisez la zone de dépôt ci-dessus.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {orderMedias.map((med) => (
                       <div
                         key={med.id}
-                        className={`rounded-2xl border overflow-hidden flex flex-col justify-between transition-all ${
+                        className={`rounded-xl border overflow-hidden flex flex-col justify-between transition-all ${
                           med.pret_pour_livraison
-                            ? 'bg-[#0C0D0E]/90 border-[#FFF8B9]/45 shadow-glow'
-                            : 'bg-[#0C0D0E]/70 border-[#FFF8B9]/20'
+                            ? 'bg-white border-[#568203]/50 shadow-glow'
+                            : 'bg-stone-50 border-stone-200'
                         }`}
                       >
                         {/* Media Player / Viewer */}
-                        <div className="aspect-video w-full bg-[#090A0B] relative border-b border-[#FFF8B9]/15">
+                        <div className="aspect-video w-full bg-stone-100 relative border-b border-stone-200/85">
                           {med.type_media === 'video' ? (
                             <iframe
                               src={getVideoPreviewUrl(med.drive_file_id)}
@@ -642,16 +642,16 @@ function ProductionWorkshopContent() {
                             <div className="flex items-center gap-2 min-w-0">
                               {med.type_media === 'video' ? (
                                 <Film
-                                  className="h-4 w-4 text-[#FFF8B9] shrink-0"
+                                  className="h-4 w-4 text-zinc-900 shrink-0"
                                   strokeWidth={1.5}
                                 />
                               ) : (
                                 <ImageIcon
-                                  className="h-4 w-4 text-[#FFF8B9] shrink-0"
+                                  className="h-4 w-4 text-zinc-900 shrink-0"
                                   strokeWidth={1.5}
                                 />
                               )}
-                              <span className="text-xs font-medium text-[#FFF8B9] truncate">
+                              <span className="text-xs font-medium text-zinc-900 truncate">
                                 {med.nom_fichier}
                               </span>
                             </div>
@@ -659,14 +659,14 @@ function ProductionWorkshopContent() {
                             <button
                               type="button"
                               onClick={() => deleteMedia(med.id)}
-                              className="rounded-lg p-1 text-[#FFF8B9]/50 hover:text-[#FFF8B9] hover:bg-[#FFF8B9]/10"
+                              className="rounded-lg p-1 text-zinc-400 hover:text-zinc-900 hover:bg-stone-100/80"
                               aria-label="Supprimer le média"
                             >
                               <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                             </button>
                           </div>
 
-                          <div className="text-[10px] font-mono text-[#FFF8B9]/55 truncate">
+                          <div className="text-[10px] font-mono text-zinc-500 truncate">
                             Drive ID : {med.drive_file_id}
                           </div>
 
@@ -681,19 +681,19 @@ function ProductionWorkshopContent() {
                             }
                             className={`w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-medium border transition-all ${
                               med.pret_pour_livraison
-                                ? 'bg-[#568203] text-[#FFF8B9] border-[#FFF8B9]/40'
-                                : 'bg-[#FFF8B9]/5 text-[#FFF8B9]/80 border-[#FFF8B9]/20 hover:bg-[#FFF8B9]/10'
+                                ? 'bg-[#568203] text-white border-[#568203]/45'
+                                : 'bg-stone-50/80 text-zinc-700 border-stone-200 hover:bg-stone-100/80'
                             }`}
                           >
                             <span className="flex items-center gap-2">
                               {med.pret_pour_livraison ? (
                                 <CheckSquare
-                                  className="h-4 w-4 text-[#FFF8B9]"
+                                  className="h-4 w-4 text-zinc-900"
                                   strokeWidth={1.5}
                                 />
                               ) : (
                                 <Square
-                                  className="h-4 w-4 text-[#FFF8B9]/70"
+                                  className="h-4 w-4 text-zinc-600"
                                   strokeWidth={1.5}
                                 />
                               )}
@@ -716,18 +716,18 @@ function ProductionWorkshopContent() {
 
       {/* Modal: Create Order */}
       {isNewOrderOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090A0B]/80 backdrop-blur-md p-4">
-          <div className="glass-card w-full max-w-lg p-6 sm:p-8 border border-[#FFF8B9]/30">
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#FFF8B9]/15">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/35 backdrop-blur-md p-4">
+          <div className="glass-card w-full max-w-lg p-4 sm:p-3.5 border border-[#568203]/30">
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-200/85">
               <div className="flex items-center gap-2.5">
-                <Video className="h-5 w-5 text-[#FFF8B9]" strokeWidth={1.5} />
-                <h2 className="text-lg font-semibold text-[#FFF8B9]">
+                <Video className="h-5 w-5 text-zinc-900" strokeWidth={1.5} />
+                <h2 className="text-lg font-semibold text-zinc-900">
                   Nouvelle Commande UGC
                 </h2>
               </div>
               <button
                 onClick={() => setIsNewOrderOpen(false)}
-                className="rounded-lg p-1 text-[#FFF8B9]/60 hover:text-[#FFF8B9]"
+                className="rounded-lg p-1 text-zinc-500 hover:text-zinc-900"
               >
                 <X className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -735,7 +735,7 @@ function ProductionWorkshopContent() {
 
             <form onSubmit={handleCreateOrder} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                   Client rattaché *
                 </label>
                 <select
@@ -748,7 +748,7 @@ function ProductionWorkshopContent() {
                     <option
                       key={p.id}
                       value={p.id}
-                      className="bg-[#0C0D0E] text-[#FFF8B9]"
+                      className="bg-white text-zinc-900"
                     >
                       {p.nom_marque} ({p.pays})
                     </option>
@@ -757,7 +757,7 @@ function ProductionWorkshopContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                   Intitulé du Pack *
                 </label>
                 <input
@@ -772,7 +772,7 @@ function ProductionWorkshopContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                     Montant (€)
                   </label>
                   <input
@@ -786,7 +786,7 @@ function ProductionWorkshopContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                     Nb Créations
                   </label>
                   <input
@@ -799,7 +799,7 @@ function ProductionWorkshopContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                     Date Limite
                   </label>
                   <input
@@ -812,7 +812,7 @@ function ProductionWorkshopContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/80 mb-1.5">
+                <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
                   Brief Produit
                 </label>
                 <textarea
@@ -824,7 +824,7 @@ function ProductionWorkshopContent() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#FFF8B9]/15">
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-200/85">
                 <button
                   type="button"
                   onClick={() => setIsNewOrderOpen(false)}

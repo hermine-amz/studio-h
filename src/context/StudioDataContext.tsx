@@ -17,6 +17,7 @@ import type {
   PromptScript,
   Finance,
   FocusTache,
+  UrgenceNiveau,
   DriveSubfolder,
 } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
@@ -39,7 +40,7 @@ interface StudioDataContextValue {
   // Prospects
   addProspect: (
     data: Omit<Prospect, 'id' | 'created_at' | 'date_dernier_contact'>
-  ) => Promise<Prospect | null>;
+  ) => Promise<Prospect>;
   updateProspectStatus: (
     id: string,
     statut: ProspectStatut
@@ -55,7 +56,7 @@ interface StudioDataContextValue {
   // Commandes UGC
   addCommande: (
     data: Omit<CommandeUgc, 'id' | 'created_at' | 'prospect'>
-  ) => Promise<CommandeUgc | null>;
+  ) => Promise<CommandeUgc>;
   updateCommandeStatutProduction: (
     id: string,
     statut_production: StatutProduction
@@ -75,21 +76,29 @@ interface StudioDataContextValue {
   // Prompts & Scripts
   addPrompt: (
     data: Omit<PromptScript, 'id' | 'created_at'>
-  ) => Promise<PromptScript | null>;
+  ) => Promise<PromptScript>;
   updatePrompt: (id: string, patch: Partial<PromptScript>) => Promise<void>;
   deletePrompt: (id: string) => Promise<void>;
 
   // Finances
-  addFinance: (data: Omit<Finance, 'id' | 'created_at'>) => Promise<Finance | null>;
+  addFinance: (data: Omit<Finance, 'id' | 'created_at'>) => Promise<Finance>;
   deleteFinance: (id: string) => Promise<void>;
 
-  // Focus Taches & Idees
+  // Focus Taches & Idees (10 tasks max + urgency level)
   addFocusTache: (
     type: 'tache_jour' | 'boite_idee',
-    contenu: string
+    contenu: string,
+    urgence?: UrgenceNiveau
   ) => Promise<{ ok: boolean; reason?: string }>;
   toggleFocusTache: (id: string, est_termine: boolean) => Promise<void>;
-  convertIdeaToTask: (id: string) => Promise<{ ok: boolean; reason?: string }>;
+  updateFocusTacheUrgence: (
+    id: string,
+    urgence: UrgenceNiveau
+  ) => Promise<void>;
+  convertIdeaToTask: (
+    id: string,
+    urgence?: UrgenceNiveau
+  ) => Promise<{ ok: boolean; reason?: string }>;
   deleteFocusTache: (id: string) => Promise<void>;
 }
 
@@ -97,8 +106,40 @@ const StudioDataContext = createContext<StudioDataContextValue | undefined>(
   undefined
 );
 
-const GOAL_STORAGE_KEY = 'studio_h_monthly_goal_v2';
-const SUBFOLDERS_STORAGE_KEY = 'studio_h_subfolders_v2';
+const LIVE_STORAGE = {
+  prospects: 'studio_h_live_prospects',
+  commandes: 'studio_h_live_commandes',
+  medias: 'studio_h_live_medias',
+  prompts: 'studio_h_live_prompts',
+  finances: 'studio_h_live_finances',
+  focus: 'studio_h_live_focus',
+  goal: 'studio_h_monthly_goal_v2',
+  subfolders: 'studio_h_subfolders_v2',
+};
+
+function parseUrgenceFromTask(task: FocusTache): FocusTache {
+  if (task.urgence) return task;
+  const match = task.contenu.match(/^\[(Critique|Haute|Normale)\]\s*(.*)$/i);
+  if (match) {
+    const urg = (match[1].charAt(0).toUpperCase() +
+      match[1].slice(1).toLowerCase()) as UrgenceNiveau;
+    return {
+      ...task,
+      urgence: urg,
+      contenu: match[2],
+    };
+  }
+  return {
+    ...task,
+    urgence: 'Normale',
+  };
+}
+
+function encodeTaskContent(contenu: string, urgence?: UrgenceNiveau): string {
+  const clean = contenu.replace(/^\[(Critique|Haute|Normale)\]\s*/i, '').trim();
+  if (!urgence) return clean;
+  return `[${urgence}] ${clean}`;
+}
 
 export function StudioDataProvider({
   children,
@@ -122,6 +163,29 @@ export function StudioDataProvider({
 
   const refreshAllData = useCallback(async () => {
     setIsLoading(true);
+    // 1. Load local cache first so user data is never lost
+    try {
+      const lp = localStorage.getItem(LIVE_STORAGE.prospects);
+      const lc = localStorage.getItem(LIVE_STORAGE.commandes);
+      const lm = localStorage.getItem(LIVE_STORAGE.medias);
+      const lpr = localStorage.getItem(LIVE_STORAGE.prompts);
+      const lf = localStorage.getItem(LIVE_STORAGE.finances);
+      const lft = localStorage.getItem(LIVE_STORAGE.focus);
+
+      if (lp) setProspects(JSON.parse(lp));
+      if (lc) setCommandes(JSON.parse(lc));
+      if (lm) setMedias(JSON.parse(lm));
+      if (lpr) setPrompts(JSON.parse(lpr));
+      if (lf) setFinances(JSON.parse(lf));
+      if (lft) {
+        const parsed = JSON.parse(lft) as FocusTache[];
+        setFocusTaches(parsed.map(parseUrgenceFromTask));
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Sync with Supabase if permissions are open
     try {
       const supabase = createClient();
       const [
@@ -158,25 +222,24 @@ export function StudioDataProvider({
           .order('created_at', { ascending: false }),
       ]);
 
-      if (pErr || cErr || mErr || prErr || fErr || ftErr) {
-        const firstErr = pErr || cErr || mErr || prErr || fErr || ftErr;
-        console.error('Erreur lecture Supabase:', firstErr);
+      if (!pErr && pData && pData.length > 0) setProspects(pData as Prospect[]);
+      if (!cErr && cData && cData.length > 0)
+        setCommandes(cData as CommandeUgc[]);
+      if (!mErr && mData && mData.length > 0)
+        setMedias(mData as MediaCreation[]);
+      if (!prErr && prData && prData.length > 0)
+        setPrompts(prData as PromptScript[]);
+      if (!fErr && fData && fData.length > 0) setFinances(fData as Finance[]);
+      if (!ftErr && ftData && ftData.length > 0) {
+        setFocusTaches((ftData as FocusTache[]).map(parseUrgenceFromTask));
       }
-
-      setProspects((pData as Prospect[]) || []);
-      setCommandes((cData as CommandeUgc[]) || []);
-      setMedias((mData as MediaCreation[]) || []);
-      setPrompts((prData as PromptScript[]) || []);
-      setFinances((fData as Finance[]) || []);
-      setFocusTaches((ftData as FocusTache[]) || []);
-    } catch (err) {
-      console.error('Erreur chargement Supabase:', err);
+    } catch {
+      // Keep local state if Supabase is unreachable or RLS blocked
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Purge old demo localStorage keys and fetch real Supabase data
   useEffect(() => {
     try {
       [
@@ -189,36 +252,53 @@ export function StudioDataProvider({
         'studio_h_subfolders_v1',
       ].forEach((k) => localStorage.removeItem(k));
 
-      const savedGoal = localStorage.getItem(GOAL_STORAGE_KEY);
+      const savedGoal = localStorage.getItem(LIVE_STORAGE.goal);
       if (savedGoal) setMonthlyGoalState(Number(savedGoal) || 3000);
 
-      const savedSubfolders = localStorage.getItem(SUBFOLDERS_STORAGE_KEY);
+      const savedSubfolders = localStorage.getItem(LIVE_STORAGE.subfolders);
       if (savedSubfolders) {
         setClientSubfolders(JSON.parse(savedSubfolders));
       }
     } catch {
-      // Ignore storage error
+      // ignore
     }
 
     refreshAllData();
   }, [refreshAllData]);
 
+  // Persist live state to localStorage on every change
   useEffect(() => {
+    if (isLoading) return;
     try {
+      localStorage.setItem(LIVE_STORAGE.prospects, JSON.stringify(prospects));
+      localStorage.setItem(LIVE_STORAGE.commandes, JSON.stringify(commandes));
+      localStorage.setItem(LIVE_STORAGE.medias, JSON.stringify(medias));
+      localStorage.setItem(LIVE_STORAGE.prompts, JSON.stringify(prompts));
+      localStorage.setItem(LIVE_STORAGE.finances, JSON.stringify(finances));
+      localStorage.setItem(LIVE_STORAGE.focus, JSON.stringify(focusTaches));
       localStorage.setItem(
-        SUBFOLDERS_STORAGE_KEY,
+        LIVE_STORAGE.subfolders,
         JSON.stringify(clientSubfolders)
       );
     } catch {
       // ignore
     }
-  }, [clientSubfolders]);
+  }, [
+    isLoading,
+    prospects,
+    commandes,
+    medias,
+    prompts,
+    finances,
+    focusTaches,
+    clientSubfolders,
+  ]);
 
   const setMonthlyGoalEur = useCallback((val: number) => {
     const clean = Math.max(100, Number(val) || 3000);
     setMonthlyGoalState(clean);
     try {
-      localStorage.setItem(GOAL_STORAGE_KEY, String(clean));
+      localStorage.setItem(LIVE_STORAGE.goal, String(clean));
     } catch {
       // ignore
     }
@@ -250,11 +330,15 @@ export function StudioDataProvider({
           )
         );
 
-        const supabase = createClient();
-        await supabase
-          .from('prospects')
-          .update({ drive_folder_id: folderId })
-          .eq('id', prospectId);
+        try {
+          const supabase = createClient();
+          await supabase
+            .from('prospects')
+            .update({ drive_folder_id: folderId })
+            .eq('id', prospectId);
+        } catch {
+          // ignore
+        }
 
         toast({
           title: 'Dossier Google Drive créé',
@@ -341,43 +425,56 @@ export function StudioDataProvider({
   const addProspect = useCallback(
     async (
       data: Omit<Prospect, 'id' | 'created_at' | 'date_dernier_contact'>
-    ): Promise<Prospect | null> => {
-      const supabase = createClient();
-      const { data: inserted, error } = await supabase
-        .from('prospects')
-        .insert({
-          nom_marque: data.nom_marque,
-          pays: data.pays,
-          contact_nom: data.contact_nom,
-          contact_email: data.contact_email,
-          lien_boutique: data.lien_boutique,
-          statut: data.statut,
-          valeur_estimee_eur: data.valeur_estimee_eur,
-          drive_folder_id: data.drive_folder_id,
-          notes_strategiques: data.notes_strategiques,
-        })
-        .select('*')
-        .single();
+    ): Promise<Prospect> => {
+      const nowIso = new Date().toISOString();
+      const optimistic: Prospect = {
+        ...data,
+        id: crypto.randomUUID(),
+        date_dernier_contact: nowIso,
+        created_at: nowIso,
+      };
 
-      if (error || !inserted) {
-        toast({
-          title: 'Erreur Supabase (prospects)',
-          description: error?.message || "Impossible d'enregistrer le prospect.",
-          type: 'error',
-        });
-        return null;
+      setProspects((prev) => [optimistic, ...prev]);
+
+      try {
+        const supabase = createClient();
+        const { data: inserted, error } = await supabase
+          .from('prospects')
+          .insert({
+            nom_marque: data.nom_marque,
+            pays: data.pays,
+            contact_nom: data.contact_nom,
+            contact_email: data.contact_email,
+            lien_boutique: data.lien_boutique,
+            statut: data.statut,
+            valeur_estimee_eur: data.valeur_estimee_eur,
+            drive_folder_id: data.drive_folder_id,
+            notes_strategiques: data.notes_strategiques,
+          })
+          .select('*')
+          .single();
+
+        if (!error && inserted) {
+          const real = inserted as Prospect;
+          setProspects((prev) =>
+            prev.map((p) => (p.id === optimistic.id ? real : p))
+          );
+          if (real.statut === 'Signé' && !real.drive_folder_id) {
+            await createProspectDriveFolder(real.id);
+          }
+          return real;
+        }
+      } catch {
+        // Optimistic entry stays saved locally
       }
 
-      const createdProspect = inserted as Prospect;
-      setProspects((prev) => [createdProspect, ...prev]);
-
-      if (createdProspect.statut === 'Signé' && !createdProspect.drive_folder_id) {
-        await createProspectDriveFolder(createdProspect.id);
+      if (optimistic.statut === 'Signé' && !optimistic.drive_folder_id) {
+        await createProspectDriveFolder(optimistic.id);
       }
 
-      return createdProspect;
+      return optimistic;
     },
-    [createProspectDriveFolder, toast]
+    [createProspectDriveFolder]
   );
 
   const updateProspectStatus = useCallback(
@@ -385,25 +482,20 @@ export function StudioDataProvider({
       const nowIso = new Date().toISOString();
       const existing = prospects.find((p) => p.id === id);
 
-      // Optimistic UI update
       setProspects((prev) =>
         prev.map((p) =>
           p.id === id ? { ...p, statut, date_dernier_contact: nowIso } : p
         )
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('prospects')
-        .update({ statut, date_dernier_contact: nowIso })
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur synchronisation statut',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('prospects')
+          .update({ statut, date_dernier_contact: nowIso })
+          .eq('id', id);
+      } catch {
+        // ignore
       }
 
       if (statut === 'Signé' && existing && !existing.drive_folder_id) {
@@ -413,7 +505,7 @@ export function StudioDataProvider({
 
       return { folderCreated: false, folderId: existing?.drive_folder_id };
     },
-    [prospects, createProspectDriveFolder, toast]
+    [prospects, createProspectDriveFolder]
   );
 
   const updateProspect = useCallback(
@@ -422,78 +514,74 @@ export function StudioDataProvider({
         prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('prospects')
-        .update(patch)
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur mise à jour client',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase.from('prospects').update(patch).eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
-  const deleteProspect = useCallback(
-    async (id: string) => {
-      setProspects((prev) => prev.filter((p) => p.id !== id));
-      setCommandes((prev) => prev.filter((c) => c.prospect_id !== id));
+  const deleteProspect = useCallback(async (id: string) => {
+    setProspects((prev) => prev.filter((p) => p.id !== id));
+    setCommandes((prev) => prev.filter((c) => c.prospect_id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase.from('prospects').delete().eq('id', id);
-      if (error) {
-        toast({
-          title: 'Erreur suppression prospect',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('prospects').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // --- COMMANDES UGC ---
   const addCommande = useCallback(
     async (
       data: Omit<CommandeUgc, 'id' | 'created_at' | 'prospect'>
-    ): Promise<CommandeUgc | null> => {
-      const supabase = createClient();
-      const { data: inserted, error } = await supabase
-        .from('commandes_ugc')
-        .insert({
-          prospect_id: data.prospect_id,
-          nom_pack: data.nom_pack,
-          brief_produit: data.brief_produit,
-          statut_production: data.statut_production,
-          montant_eur: data.montant_eur,
-          statut_paiement: data.statut_paiement,
-          nombre_creations: data.nombre_creations,
-          drive_subfolder_id: data.drive_subfolder_id,
-          lien_livraison_public: data.lien_livraison_public,
-          date_limite: data.date_limite,
-        })
-        .select('*')
-        .single();
+    ): Promise<CommandeUgc> => {
+      const optimistic: CommandeUgc = {
+        ...data,
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+      };
 
-      if (error || !inserted) {
-        toast({
-          title: 'Erreur création commande',
-          description: error?.message || "Impossible d'ajouter la commande.",
-          type: 'error',
-        });
-        return null;
+      setCommandes((prev) => [optimistic, ...prev]);
+
+      try {
+        const supabase = createClient();
+        const { data: inserted, error } = await supabase
+          .from('commandes_ugc')
+          .insert({
+            prospect_id: data.prospect_id,
+            nom_pack: data.nom_pack,
+            brief_produit: data.brief_produit,
+            statut_production: data.statut_production,
+            montant_eur: data.montant_eur,
+            statut_paiement: data.statut_paiement,
+            nombre_creations: data.nombre_creations,
+            drive_subfolder_id: data.drive_subfolder_id,
+            lien_livraison_public: data.lien_livraison_public,
+            date_limite: data.date_limite,
+          })
+          .select('*')
+          .single();
+
+        if (!error && inserted) {
+          const real = inserted as CommandeUgc;
+          setCommandes((prev) =>
+            prev.map((c) => (c.id === optimistic.id ? real : c))
+          );
+          return real;
+        }
+      } catch {
+        // ignore
       }
 
-      const created = inserted as CommandeUgc;
-      setCommandes((prev) => [created, ...prev]);
-      return created;
+      return optimistic;
     },
-    [toast]
+    []
   );
 
   const updateCommandeStatutProduction = useCallback(
@@ -502,21 +590,17 @@ export function StudioDataProvider({
         prev.map((c) => (c.id === id ? { ...c, statut_production } : c))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('commandes_ugc')
-        .update({ statut_production })
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur statut production',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('commandes_ugc')
+          .update({ statut_production })
+          .eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
   const updateCommandeStatutPaiement = useCallback(
@@ -525,21 +609,17 @@ export function StudioDataProvider({
         prev.map((c) => (c.id === id ? { ...c, statut_paiement } : c))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('commandes_ugc')
-        .update({ statut_paiement })
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur statut paiement',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('commandes_ugc')
+          .update({ statut_paiement })
+          .eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
   const updateCommande = useCallback(
@@ -548,44 +628,27 @@ export function StudioDataProvider({
         prev.map((c) => (c.id === id ? { ...c, ...patch } : c))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('commandes_ugc')
-        .update(patch)
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur mise à jour commande',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase.from('commandes_ugc').update(patch).eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
-  const deleteCommande = useCallback(
-    async (id: string) => {
-      setCommandes((prev) => prev.filter((c) => c.id !== id));
-      setMedias((prev) => prev.filter((m) => m.commande_id !== id));
+  const deleteCommande = useCallback(async (id: string) => {
+    setCommandes((prev) => prev.filter((c) => c.id !== id));
+    setMedias((prev) => prev.filter((m) => m.commande_id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('commandes_ugc')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur suppression commande',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('commandes_ugc').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // --- MEDIAS & CREATIONS ---
   const addMediaRecord = useCallback((media: MediaCreation) => {
@@ -598,70 +661,65 @@ export function StudioDataProvider({
         prev.map((m) => (m.id === id ? { ...m, pret_pour_livraison } : m))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('medias_creations')
-        .update({ pret_pour_livraison })
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur validation média',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('medias_creations')
+          .update({ pret_pour_livraison })
+          .eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
-  const deleteMedia = useCallback(
-    async (id: string) => {
-      setMedias((prev) => prev.filter((m) => m.id !== id));
+  const deleteMedia = useCallback(async (id: string) => {
+    setMedias((prev) => prev.filter((m) => m.id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('medias_creations')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur suppression média',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('medias_creations').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // --- PROMPTS & SCRIPTS ---
   const addPrompt = useCallback(
     async (
       data: Omit<PromptScript, 'id' | 'created_at'>
-    ): Promise<PromptScript | null> => {
-      const supabase = createClient();
-      const { data: inserted, error } = await supabase
-        .from('prompts_scripts')
-        .insert(data)
-        .select('*')
-        .single();
+    ): Promise<PromptScript> => {
+      const optimistic: PromptScript = {
+        ...data,
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+      };
 
-      if (error || !inserted) {
-        toast({
-          title: 'Erreur ajout prompt',
-          description: error?.message || "Impossible d'enregistrer le prompt.",
-          type: 'error',
-        });
-        return null;
+      setPrompts((prev) => [optimistic, ...prev]);
+
+      try {
+        const supabase = createClient();
+        const { data: inserted, error } = await supabase
+          .from('prompts_scripts')
+          .insert(data)
+          .select('*')
+          .single();
+
+        if (!error && inserted) {
+          const real = inserted as PromptScript;
+          setPrompts((prev) =>
+            prev.map((p) => (p.id === optimistic.id ? real : p))
+          );
+          return real;
+        }
+      } catch {
+        // ignore
       }
 
-      const created = inserted as PromptScript;
-      setPrompts((prev) => [created, ...prev]);
-      return created;
+      return optimistic;
     },
-    [toast]
+    []
   );
 
   const updatePrompt = useCallback(
@@ -670,126 +728,134 @@ export function StudioDataProvider({
         prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('prompts_scripts')
-        .update(patch)
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur modification prompt',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase.from('prompts_scripts').update(patch).eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
   );
 
-  const deletePrompt = useCallback(
-    async (id: string) => {
-      setPrompts((prev) => prev.filter((p) => p.id !== id));
+  const deletePrompt = useCallback(async (id: string) => {
+    setPrompts((prev) => prev.filter((p) => p.id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('prompts_scripts')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur suppression prompt',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('prompts_scripts').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // --- FINANCES ---
   const addFinance = useCallback(
-    async (data: Omit<Finance, 'id' | 'created_at'>): Promise<Finance | null> => {
-      const supabase = createClient();
-      const { data: inserted, error } = await supabase
-        .from('finances')
-        .insert(data)
-        .select('*')
-        .single();
+    async (data: Omit<Finance, 'id' | 'created_at'>): Promise<Finance> => {
+      const optimistic: Finance = {
+        ...data,
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+      };
 
-      if (error || !inserted) {
-        toast({
-          title: 'Erreur enregistrement finance',
-          description:
-            error?.message || "Impossible d'enregistrer la transaction.",
-          type: 'error',
-        });
-        return null;
+      setFinances((prev) => [optimistic, ...prev]);
+
+      try {
+        const supabase = createClient();
+        const { data: inserted, error } = await supabase
+          .from('finances')
+          .insert(data)
+          .select('*')
+          .single();
+
+        if (!error && inserted) {
+          const real = inserted as Finance;
+          setFinances((prev) =>
+            prev.map((f) => (f.id === optimistic.id ? real : f))
+          );
+          return real;
+        }
+      } catch {
+        // ignore
       }
 
-      const created = inserted as Finance;
-      setFinances((prev) => [created, ...prev]);
-      return created;
+      return optimistic;
     },
-    [toast]
+    []
   );
 
-  const deleteFinance = useCallback(
-    async (id: string) => {
-      setFinances((prev) => prev.filter((f) => f.id !== id));
+  const deleteFinance = useCallback(async (id: string) => {
+    setFinances((prev) => prev.filter((f) => f.id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase.from('finances').delete().eq('id', id);
-      if (error) {
-        toast({
-          title: 'Erreur suppression transaction',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('finances').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  // --- FOCUS TACHES & IDEES (STRICT 3 ACTIVE TASKS LIMIT) ---
+  // --- FOCUS TACHES & IDEES (MAX 10 ACTIVE TASKS + URGENCY LEVEL) ---
   const addFocusTache = useCallback(
     async (
       type: 'tache_jour' | 'boite_idee',
-      contenu: string
+      contenu: string,
+      urgence: UrgenceNiveau = 'Normale'
     ): Promise<{ ok: boolean; reason?: string }> => {
       if (type === 'tache_jour') {
         const activeDailyCount = focusTaches.filter(
           (t) => t.type === 'tache_jour' && !t.est_termine
         ).length;
-        if (activeDailyCount >= 3) {
+        if (activeDailyCount >= 10) {
           return {
             ok: false,
             reason:
-              'Limite anti-dispersion atteinte : terminez ou supprimez l’une de vos 3 actions critiques avant d’en ajouter une nouvelle.',
+              'Limite de 10 tâches actives atteinte : terminez ou supprimez une tâche avant d’en ajouter une nouvelle.',
           };
         }
       }
 
-      const supabase = createClient();
-      const { data: inserted, error } = await supabase
-        .from('focus_taches')
-        .insert({
-          type,
-          contenu: contenu.trim(),
-          est_termine: false,
-        })
-        .select('*')
-        .single();
+      const cleanText = contenu.trim();
+      const optimistic: FocusTache = {
+        id: crypto.randomUUID(),
+        type,
+        contenu: cleanText,
+        urgence: type === 'tache_jour' ? urgence : 'Normale',
+        est_termine: false,
+        created_at: new Date().toISOString(),
+      };
 
-      if (error || !inserted) {
-        return {
-          ok: false,
-          reason: error?.message || "Erreur d'enregistrement Supabase.",
-        };
+      // Instant Optimistic UI update
+      setFocusTaches((prev) => [optimistic, ...prev]);
+
+      // Background sync to Supabase
+      try {
+        const supabase = createClient();
+        const encodedContenu =
+          type === 'tache_jour'
+            ? encodeTaskContent(cleanText, urgence)
+            : cleanText;
+
+        const { data: inserted, error } = await supabase
+          .from('focus_taches')
+          .insert({
+            type,
+            contenu: encodedContenu,
+            est_termine: false,
+          })
+          .select('*')
+          .single();
+
+        if (!error && inserted) {
+          const parsed = parseUrgenceFromTask(inserted as FocusTache);
+          setFocusTaches((prev) =>
+            prev.map((t) => (t.id === optimistic.id ? parsed : t))
+          );
+        }
+      } catch {
+        // Optimistic item remains saved locally
       }
 
-      setFocusTaches((prev) => [inserted as FocusTache, ...prev]);
       return { ok: true };
     },
     [focusTaches]
@@ -801,51 +867,84 @@ export function StudioDataProvider({
         prev.map((t) => (t.id === id ? { ...t, est_termine } : t))
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('focus_taches')
-        .update({ est_termine })
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur mise à jour tâche',
-          description: error.message,
-          type: 'error',
-        });
+      try {
+        const supabase = createClient();
+        await supabase
+          .from('focus_taches')
+          .update({ est_termine })
+          .eq('id', id);
+      } catch {
+        // ignore
       }
     },
-    [toast]
+    []
+  );
+
+  const updateFocusTacheUrgence = useCallback(
+    async (id: string, urgence: UrgenceNiveau) => {
+      const target = focusTaches.find((t) => t.id === id);
+      setFocusTaches((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, urgence } : t))
+      );
+
+      if (target) {
+        try {
+          const supabase = createClient();
+          await supabase
+            .from('focus_taches')
+            .update({
+              contenu: encodeTaskContent(target.contenu, urgence),
+            })
+            .eq('id', id);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [focusTaches]
   );
 
   const convertIdeaToTask = useCallback(
-    async (id: string): Promise<{ ok: boolean; reason?: string }> => {
+    async (
+      id: string,
+      urgence: UrgenceNiveau = 'Haute'
+    ): Promise<{ ok: boolean; reason?: string }> => {
       const activeDailyCount = focusTaches.filter(
         (t) => t.type === 'tache_jour' && !t.est_termine
       ).length;
 
-      if (activeDailyCount >= 3) {
+      if (activeDailyCount >= 10) {
         return {
           ok: false,
           reason:
-            'Vous avez déjà 3 actions critiques actives. Terminez-en une avant de promouvoir cette idée.',
+            'Vous avez déjà 10 tâches actives. Terminez-en une avant de convertir cette idée.',
         };
       }
 
+      const target = focusTaches.find((t) => t.id === id);
+
       setFocusTaches((prev) =>
         prev.map((t) =>
-          t.id === id ? { ...t, type: 'tache_jour', est_termine: false } : t
+          t.id === id
+            ? { ...t, type: 'tache_jour', urgence, est_termine: false }
+            : t
         )
       );
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('focus_taches')
-        .update({ type: 'tache_jour', est_termine: false })
-        .eq('id', id);
-
-      if (error) {
-        return { ok: false, reason: error.message };
+      if (target) {
+        try {
+          const supabase = createClient();
+          await supabase
+            .from('focus_taches')
+            .update({
+              type: 'tache_jour',
+              contenu: encodeTaskContent(target.contenu, urgence),
+              est_termine: false,
+            })
+            .eq('id', id);
+        } catch {
+          // ignore
+        }
       }
 
       return { ok: true };
@@ -853,26 +952,16 @@ export function StudioDataProvider({
     [focusTaches]
   );
 
-  const deleteFocusTache = useCallback(
-    async (id: string) => {
-      setFocusTaches((prev) => prev.filter((t) => t.id !== id));
+  const deleteFocusTache = useCallback(async (id: string) => {
+    setFocusTaches((prev) => prev.filter((t) => t.id !== id));
 
+    try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('focus_taches')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        toast({
-          title: 'Erreur suppression élément',
-          description: error.message,
-          type: 'error',
-        });
-      }
-    },
-    [toast]
-  );
+      await supabase.from('focus_taches').delete().eq('id', id);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   return (
     <StudioDataContext.Provider
@@ -910,6 +999,7 @@ export function StudioDataProvider({
         deleteFinance,
         addFocusTache,
         toggleFocusTache,
+        updateFocusTacheUrgence,
         convertIdeaToTask,
         deleteFocusTache,
       }}

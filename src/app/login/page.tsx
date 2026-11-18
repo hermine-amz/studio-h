@@ -56,48 +56,47 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0C0D0E] text-[#FFF8B9] flex flex-col justify-center items-center px-4 relative overflow-hidden">
-      {/* Subtle Ambient Light */}
+    <div className="min-h-screen bg-[#F8F9FA] text-zinc-900 flex flex-col justify-center items-center px-4 relative overflow-hidden">
       <div className="pointer-events-none fixed inset-0">
-        <div className="absolute top-1/4 left-1/3 h-96 w-96 rounded-full bg-[#FFF8B9]/[0.03] blur-[140px]" />
-        <div className="absolute bottom-1/4 right-1/3 h-80 w-80 rounded-full bg-[#568203]/[0.06] blur-[150px]" />
+        <div className="absolute top-1/4 left-1/3 h-72 w-72 rounded-full bg-[#FFF8B9]/60 blur-[100px]" />
+        <div className="absolute bottom-1/4 right-1/3 h-64 w-64 rounded-full bg-[#568203]/[0.05] blur-[120px]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="flex flex-col items-center text-center mb-8">
-          <StudioHLogo size="lg" showText={false} className="mb-4" />
-          <h1 className="text-2xl font-semibold tracking-[0.14em] uppercase text-[#FFF8B9]">
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="flex flex-col items-center text-center mb-5">
+          <StudioHLogo size="lg" showText={false} className="mb-3" />
+          <h1 className="text-lg font-semibold tracking-[0.14em] uppercase text-zinc-900">
             Studio H
           </h1>
-          <p className="mt-1.5 text-xs uppercase tracking-[0.12em] text-[#FFF8B9]/55">
-            Quartier Général Privé — Production UGC IA Europe
+          <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
+            QG Privé — Production UGC IA Europe
           </p>
         </div>
 
-        <div className="glass-card p-8 border border-[#FFF8B9]/15">
-          <div className="flex items-center gap-2.5 pb-5 mb-6 border-b border-[#FFF8B9]/10">
+        <div className="glass-card p-6 border border-stone-200/90">
+          <div className="flex items-center gap-2 pb-3.5 mb-4 border-b border-stone-100">
             <ShieldCheck
-              className="h-5 w-5 text-[#568203]"
+              className="h-4 w-4 text-[#568203] shrink-0"
               strokeWidth={1.5}
             />
             <div>
-              <h2 className="text-sm font-medium text-[#FFF8B9]">
+              <h2 className="text-xs font-semibold text-zinc-900">
                 Accès Exclusif Administrateur
               </h2>
-              <p className="text-xs text-[#FFF8B9]/55">
-                Aucun accès client externe autorisé sur cette instance
+              <p className="text-[11px] text-zinc-500">
+                Aucun accès client externe autorisé
               </p>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-3">
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/75 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
                 Email de connexion
               </label>
               <div className="relative">
                 <Mail
-                  className="h-4 w-4 text-[#FFF8B9]/45 absolute left-3.5 top-3"
+                  className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-2.5"
                   strokeWidth={1.5}
                 />
                 <input
@@ -106,18 +105,18 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="amouzounhermine7@gmail.com"
-                  className="glass-input pl-10"
+                  className="glass-input pl-8"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-[#FFF8B9]/75 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
                 Mot de passe
               </label>
               <div className="relative">
                 <KeyRound
-                  className="h-4 w-4 text-[#FFF8B9]/45 absolute left-3.5 top-3"
+                  className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-2.5"
                   strokeWidth={1.5}
                 />
                 <input
@@ -126,7 +125,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Votre clé d'accès privée"
-                  className="glass-input pl-10"
+                  className="glass-input pl-8"
                 />
               </div>
             </div>
@@ -134,15 +133,13 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="btn-primary w-full py-3 mt-2"
+              className="btn-primary w-full py-2 mt-1"
             >
-              <Lock className="h-4 w-4" strokeWidth={1.5} />
+              <Lock className="h-3.5 w-3.5" strokeWidth={1.5} />
               <span>
-                {isSubmitting
-                  ? 'Vérification des accès...'
-                  : 'Déverrouiller Studio H'}
+                {isSubmitting ? 'Vérification...' : 'Déverrouiller Studio H'}
               </span>
-              <ArrowRight className="h-4 w-4 ml-auto" strokeWidth={1.5} />
+              <ArrowRight className="h-3.5 w-3.5 ml-auto" strokeWidth={1.5} />
             </button>
           </form>
         </div>
