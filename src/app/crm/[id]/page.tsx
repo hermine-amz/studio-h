@@ -419,7 +419,15 @@ function Client360Content() {
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client || !newProdName.trim()) return;
+    if (!client) return;
+    if (!newProdName.trim()) {
+      toast({
+        title: 'Nom du produit obligatoire',
+        description: 'Veuillez saisir le nom du produit avant de l’ajouter.',
+        type: 'error',
+      });
+      return;
+    }
 
     const finalAds = newProdAdInput.trim()
       ? [...newProdAds, newProdAdInput.trim()]
@@ -794,6 +802,7 @@ function Client360Content() {
             {/* Left Column (7 cols) */}
             <form
               onSubmit={handleSaveContactAndSocials}
+              noValidate
               className="lg:col-span-7 glass-card p-5 space-y-5"
             >
               <div className="flex items-center justify-between pb-3.5 border-b border-stone-200/80">
@@ -881,7 +890,6 @@ function Client360Content() {
                   </label>
                   <input
                     type="text"
-                    required
                     value={nomMarque}
                     onChange={(e) => setNomMarque(e.target.value)}
                     className="glass-input"
@@ -1145,7 +1153,7 @@ function Client360Content() {
                   </span>
                 </div>
 
-                <form onSubmit={handleAddAdLink} className="flex gap-2">
+                <form onSubmit={handleAddAdLink} noValidate className="flex gap-2">
                   <input
                     type="url"
                     value={newAdUrl}
@@ -1226,7 +1234,7 @@ function Client360Content() {
                   </span>
                 </div>
 
-                <form onSubmit={handleAddProductLink} className="flex gap-2">
+                <form onSubmit={handleAddProductLink} noValidate className="flex gap-2">
                   <input
                     type="url"
                     value={newProductUrl}
@@ -1292,6 +1300,7 @@ function Client360Content() {
           {/* Add Product Form (Collapsible) */}
           <form
             onSubmit={handleCreateProduct}
+            noValidate
             className="glass-card p-5 space-y-4"
           >
             <div
@@ -1364,7 +1373,6 @@ function Client360Content() {
                 </label>
                 <input
                   type="text"
-                  required
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
                   placeholder="Ex: Sérum Éclat Botanique 30ml"
@@ -1839,11 +1847,11 @@ function Client360Content() {
               {isSubfolderOpen && (
                 <form
                   onSubmit={handleCreateSubfolder}
-                  className="rounded-xl bg-stone-50 border border-[#568203]/30 p-3 flex gap-2"
+                  noValidate
+                  className="rounded-xl bg-stone-50 border border-[#568203]/30 p-3 flex flex-col sm:flex-row gap-2"
                 >
                   <input
                     type="text"
-                    required
                     value={subfolderName}
                     onChange={(e) => setSubfolderName(e.target.value)}
                     placeholder="Nom du sous-dossier (ex: 01_Rushes_Avatars_IA)"
@@ -2156,7 +2164,7 @@ function Client360Content() {
               Nouvelle Commande UGC — {client.nom_marque}
             </h3>
 
-            <form onSubmit={handleAddOrder} className="space-y-4">
+            <form onSubmit={handleAddOrder} noValidate className="space-y-4">
               {/* Type de commande : Commande Client Réelle vs Essai Gratuit Prospect */}
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
@@ -2239,7 +2247,6 @@ function Client360Content() {
                 </label>
                 <input
                   type="text"
-                  required
                   value={nomPack}
                   onChange={(e) => setNomPack(e.target.value)}
                   placeholder="Ex: Pack Scale Meta — 6 Vidéos UGC IA"

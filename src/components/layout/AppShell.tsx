@@ -21,6 +21,7 @@ import { cn } from '@/lib/currency';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
+import { useConfirm } from '@/context/ConfirmContext';
 
 const MOBILE_NAV = [
   { label: 'Cockpit', href: '/', icon: LayoutDashboard },
@@ -45,6 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { rlsBlocked, refreshAllData } = useStudioData();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
@@ -53,6 +55,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Se déconnecter de Studio H ?',
+      description:
+        'Vous devrez saisir à nouveau vos identifiants pour accéder à votre espace de travail.',
+      confirmLabel: 'Se déconnecter',
+      cancelLabel: 'Rester connecté',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
     document.cookie =
       'studio_h_session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     if (isSupabaseConfigured()) {
@@ -63,6 +75,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         // Ignore
       }
     }
+    toast({
+      title: 'Session fermée',
+      description: 'Vous avez été déconnecté en toute sécurité.',
+      type: 'info',
+    });
     router.push('/login');
     router.refresh();
   };

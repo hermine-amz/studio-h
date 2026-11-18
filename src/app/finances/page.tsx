@@ -14,6 +14,7 @@ import {
   PieChart,
   Tag,
   ChevronDown,
+  PiggyBank,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -79,8 +80,11 @@ export default function FinancesPage() {
     finances,
     commandes,
     prospects,
+    savingsConfig,
     addFinance,
     deleteFinance,
+    updateSavingsConfig,
+    addSavingsDeposit,
   } = useStudioData();
   const { toast } = useToast();
   const { confirm } = useConfirm();
@@ -109,6 +113,7 @@ export default function FinancesPage() {
 
   // Quick Form State
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
   const [type, setType] = useState<TypeFinance>('Dépense');
   const [categorieDepense, setCategorieDepense] =
     useState<CategorieDepense>('Vidéo IA');
@@ -117,6 +122,26 @@ export default function FinancesPage() {
   const [dateTransaction, setDateTransaction] = useState(
     new Date().toISOString().split('T')[0]
   );
+
+  // Savings Config State
+  const [isSavingsOpen, setIsSavingsOpen] = useState(false);
+  const [savingsPctInput, setSavingsPctInput] = useState(
+    String(savingsConfig.pourcentage_epargne)
+  );
+  const [savingsBaseInput, setSavingsBaseInput] = useState<
+    'benefice_net' | 'ca_encaisse'
+  >(savingsConfig.base_calcul);
+  const [savingsGoalInput, setSavingsGoalInput] = useState(
+    String(savingsConfig.objectif_epargne_eur)
+  );
+  const [savingsBalanceInput, setSavingsBalanceInput] = useState(
+    String(savingsConfig.solde_actuel_eur)
+  );
+  const [savingsAccountInput, setSavingsAccountInput] = useState(
+    savingsConfig.nom_compte
+  );
+  const [savingsDepositInput, setSavingsDepositInput] = useState('');
+  const [savingsError, setSavingsError] = useState<string | null>(null);
 
   const isDateInSelectedPeriod = useMemo(() => {
     const now = new Date();
@@ -278,7 +303,27 @@ export default function FinancesPage() {
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(montantEur);
-    if (!libelle.trim() || !amount || amount <= 0) return;
+    if (!libelle.trim()) {
+      const msg = "Le libellé de l'opération est obligatoire.";
+      setTxError(msg);
+      toast({
+        title: 'Champ obligatoire manquant',
+        description: msg,
+        type: 'error',
+      });
+      return;
+    }
+    if (!montantEur.trim() || Number.isNaN(amount) || amount <= 0) {
+      const msg = 'Veuillez saisir un montant valide supérieur à 0 €.';
+      setTxError(msg);
+      toast({
+        title: 'Montant invalide',
+        description: msg,
+        type: 'error',
+      });
+      return;
+    }
+    setTxError(null);
 
     const finalLabel =
       type === 'Dépense'
@@ -541,10 +586,17 @@ export default function FinancesPage() {
           </button>
         </div>
         {isQuickAddOpen && (
-          <form
-            onSubmit={handleAddTransaction}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
-          >
+          <div className="space-y-2.5">
+            {txError && (
+              <p className="text-xs text-red-600 font-medium bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                {txError}
+              </p>
+            )}
+            <form
+              onSubmit={handleAddTransaction}
+              noValidate
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
+            >
           <div className="lg:col-span-2">
             <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
               Type
@@ -590,9 +642,11 @@ export default function FinancesPage() {
             </label>
             <input
               type="text"
-              required
               value={libelle}
-              onChange={(e) => setLibelle(e.target.value)}
+              onChange={(e) => {
+                setLibelle(e.target.value);
+                if (txError) setTxError(null);
+              }}
               placeholder={
                 type === 'Dépense'
                   ? 'Ex: Abonnement Runway Gen-3 / Kling'
@@ -608,11 +662,13 @@ export default function FinancesPage() {
             </label>
             <input
               type="number"
-              required
               min={1}
               step="0.01"
               value={montantEur}
-              onChange={(e) => setMontantEur(e.target.value)}
+              onChange={(e) => {
+                setMontantEur(e.target.value);
+                if (txError) setTxError(null);
+              }}
               placeholder="Ex: 99"
               className="glass-input"
             />
@@ -640,9 +696,355 @@ export default function FinancesPage() {
               <span className="lg:hidden">Enregistrer</span>
             </button>
           </div>
-          </form>
+            </form>
+          </div>
         )}
       </section>
+
+      {/* 2b. Configuration & Suivi d'Épargne (Collapsible) */}
+      {(() => {
+        const baseAmount =
+          savingsConfig.base_calcul === 'benefice_net'
+            ? Math.max(0, beneficeNetEur)
+            : Math.max(0, totalRevenusEur);
+        const recommendedSavingsEur = savingsConfig.enabled
+          ? Math.round((baseAmount * savingsConfig.pourcentage_epargne) / 100)
+          : 0;
+        const savingsGoalPct =
+          savingsConfig.objectif_epargne_eur > 0
+            ? Math.min(
+                100,
+                Math.round(
+                  (savingsConfig.solde_actuel_eur /
+                    savingsConfig.objectif_epargne_eur) *
+                    100
+                )
+              )
+            : 0;
+
+        const handleSaveSavingsConfig = (e: React.FormEvent) => {
+          e.preventDefault();
+          const pct = Number(savingsPctInput);
+          const goal = Number(savingsGoalInput);
+          const bal = Number(savingsBalanceInput);
+          if (
+            !savingsAccountInput.trim() ||
+            Number.isNaN(pct) ||
+            pct < 0 ||
+            pct > 100 ||
+            Number.isNaN(goal) ||
+            goal <= 0 ||
+            Number.isNaN(bal) ||
+            bal < 0
+          ) {
+            const msg =
+              'Vérifiez les paramètres : nom du compte requis, taux entre 0 et 100 %, objectif > 0 € et solde ≥ 0 €.';
+            setSavingsError(msg);
+            toast({
+              title: 'Paramètres d’épargne invalides',
+              description: msg,
+              type: 'error',
+            });
+            return;
+          }
+          setSavingsError(null);
+          updateSavingsConfig({
+            nom_compte: savingsAccountInput.trim(),
+            pourcentage_epargne: pct,
+            base_calcul: savingsBaseInput,
+            objectif_epargne_eur: goal,
+            solde_actuel_eur: bal,
+          });
+          toast({
+            title: 'Configuration d’épargne enregistrée',
+            description: `${pct}% sur ${
+              savingsBaseInput === 'benefice_net'
+                ? 'le Bénéfice Net'
+                : 'le CA Encaissé'
+            } — Objectif : ${formatEur(goal)}.`,
+            type: 'success',
+          });
+        };
+
+        const handleQuickDeposit = (sign: 1 | -1) => {
+          const val = Number(savingsDepositInput);
+          if (!savingsDepositInput.trim() || Number.isNaN(val) || val <= 0) {
+            const msg =
+              'Veuillez saisir un montant valide supérieur à 0 € pour créditer ou débiter votre réserve.';
+            setSavingsError(msg);
+            toast({
+              title: 'Montant invalide',
+              description: msg,
+              type: 'error',
+            });
+            return;
+          }
+          setSavingsError(null);
+          addSavingsDeposit(sign * val);
+          setSavingsBalanceInput(
+            String(
+              Math.max(
+                0,
+                Number((savingsConfig.solde_actuel_eur + sign * val).toFixed(2))
+              )
+            )
+          );
+          setSavingsDepositInput('');
+          toast({
+            title:
+              sign === 1
+                ? 'Épargne créditée'
+                : 'Retrait effectué sur la réserve',
+            description: `${sign === 1 ? '+' : '-'}${formatEur(val)} (${formatFcfa(
+              val
+            )})`,
+            type: 'success',
+          });
+        };
+
+        return (
+          <section className="glass-card p-5 space-y-4">
+            <div
+              onClick={() => setIsSavingsOpen((prev) => !prev)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsSavingsOpen((prev) => !prev);
+                }
+              }}
+              className={`flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none ${
+                isSavingsOpen ? 'pb-3 border-b border-stone-200/80' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="rounded-xl bg-[#FFF8B9]/75 border border-[#568203]/25 p-2 shrink-0">
+                  <PiggyBank
+                    className="h-4 w-4 text-[#568203]"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-[15px] font-semibold text-zinc-900 truncate">
+                    Épargne & Réserve Studio H — {savingsConfig.nom_compte}
+                  </h2>
+                  <p className="text-xs text-zinc-500 truncate">
+                    Solde : {formatEur(savingsConfig.solde_actuel_eur)} / Objectif{' '}
+                    {formatEur(savingsConfig.objectif_epargne_eur)} (
+                    {savingsGoalPct}%) · À mettre de côté ({savingsConfig.pourcentage_epargne}
+                    %) : {formatEur(recommendedSavingsEur)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSavingsOpen((prev) => !prev);
+                }}
+                className="btn-secondary py-1.5 px-2.5 text-xs shrink-0"
+                aria-expanded={isSavingsOpen}
+              >
+                <span>{isSavingsOpen ? 'Réduire' : 'Configurer'}</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                    isSavingsOpen ? 'rotate-180' : ''
+                  }`}
+                  strokeWidth={1.5}
+                />
+              </button>
+            </div>
+
+            {isSavingsOpen && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div className="rounded-xl bg-stone-50/90 border border-stone-200/80 p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                      Réserve Actuelle
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-zinc-900">
+                      {formatEur(savingsConfig.solde_actuel_eur)}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      {formatFcfa(savingsConfig.solde_actuel_eur)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-[#FFF8B9]/45 border border-[#568203]/25 p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+                      À épargner sur la période ({savingsConfig.pourcentage_epargne}%)
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-[#568203]">
+                      {formatEur(recommendedSavingsEur)}
+                    </p>
+                    <p className="text-[11px] text-zinc-600">
+                      {formatFcfa(recommendedSavingsEur)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-stone-50/90 border border-stone-200/80 p-3.5">
+                    <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                      <span>Objectif d’épargne</span>
+                      <span className="font-mono text-zinc-800">
+                        {savingsGoalPct}%
+                      </span>
+                    </div>
+                    <p className="mt-1 text-lg font-bold text-zinc-900">
+                      {formatEur(savingsConfig.objectif_epargne_eur)}
+                    </p>
+                    <div className="mt-1.5 h-2 w-full rounded-full bg-stone-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#568203] transition-all duration-500"
+                        style={{ width: `${Math.max(2, savingsGoalPct)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {savingsError && (
+                  <p className="text-xs text-red-600 font-medium bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    {savingsError}
+                  </p>
+                )}
+
+                <form
+                  onSubmit={handleSaveSavingsConfig}
+                  noValidate
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end"
+                >
+                  <div className="lg:col-span-3">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Nom du compte / réserve *
+                    </label>
+                    <input
+                      type="text"
+                      value={savingsAccountInput}
+                      onChange={(e) => setSavingsAccountInput(e.target.value)}
+                      className="glass-input"
+                      placeholder="Ex: Réserve Studio H"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Taux (%) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={savingsPctInput}
+                      onChange={(e) => setSavingsPctInput(e.target.value)}
+                      className="glass-input"
+                    />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Base de calcul
+                    </label>
+                    <select
+                      value={savingsBaseInput}
+                      onChange={(e) =>
+                        setSavingsBaseInput(
+                          e.target.value as 'benefice_net' | 'ca_encaisse'
+                        )
+                      }
+                      className="glass-input"
+                    >
+                      <option value="benefice_net">Bénéfice Net</option>
+                      <option value="ca_encaisse">CA Encaissé</option>
+                    </select>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                      Objectif (€) *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={savingsGoalInput}
+                      onChange={(e) => setSavingsGoalInput(e.target.value)}
+                      className="glass-input"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <button type="submit" className="btn-primary w-full">
+                      <CheckCircle2 className="h-4 w-4" strokeWidth={1.5} />
+                      <span>Enregistrer</span>
+                    </button>
+                  </div>
+                </form>
+
+                <div className="pt-3 border-t border-stone-200/80 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div className="flex flex-wrap items-end gap-2.5">
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 mb-1">
+                        Mouvement rapide sur la réserve (€)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step="0.01"
+                        value={savingsDepositInput}
+                        onChange={(e) => setSavingsDepositInput(e.target.value)}
+                        placeholder="Ex: 250"
+                        className="glass-input w-40"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDeposit(1)}
+                      className="btn-secondary"
+                    >
+                      <Plus className="h-4 w-4 text-[#568203]" strokeWidth={1.5} />
+                      <span>Épargner</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDeposit(-1)}
+                      className="btn-secondary text-red-600 hover:text-red-700"
+                    >
+                      <span>Retirer</span>
+                    </button>
+                  </div>
+                  {recommendedSavingsEur > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        addSavingsDeposit(recommendedSavingsEur);
+                        setSavingsBalanceInput(
+                          String(
+                            Number(
+                              (
+                                savingsConfig.solde_actuel_eur +
+                                recommendedSavingsEur
+                              ).toFixed(2)
+                            )
+                          )
+                        );
+                        toast({
+                          title: 'Montant recommandé épargné',
+                          description: `+${formatEur(
+                            recommendedSavingsEur
+                          )} ajoutés à "${savingsConfig.nom_compte}".`,
+                          type: 'success',
+                        });
+                      }}
+                      className="btn-secondary text-xs"
+                    >
+                      <PiggyBank
+                        className="h-3.5 w-3.5 text-[#568203]"
+                        strokeWidth={1.5}
+                      />
+                      <span>
+                        + Épargner les {formatEur(recommendedSavingsEur)} recommandés
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* 3. Double Table: Revenues & Categorized Recurring AI Expenses */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">

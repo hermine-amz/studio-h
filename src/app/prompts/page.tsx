@@ -120,7 +120,22 @@ export default function PromptsLibraryPage() {
 
   const handleSavePrompt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!titre.trim() || !contenuTexte.trim()) return;
+    if (!titre.trim()) {
+      toast({
+        title: 'Titre obligatoire',
+        description: 'Veuillez saisir un titre pour ce prompt ou script.',
+        type: 'error',
+      });
+      return;
+    }
+    if (!contenuTexte.trim()) {
+      toast({
+        title: 'Contenu obligatoire',
+        description: 'Veuillez saisir le texte du prompt ou du script.',
+        type: 'error',
+      });
+      return;
+    }
 
     if (editingPrompt) {
       const ok = await confirm({
@@ -356,14 +371,13 @@ export default function PromptsLibraryPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSavePrompt} className="space-y-4">
+            <form onSubmit={handleSavePrompt} noValidate className="space-y-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1">
                   Titre du Prompt ou Script *
                 </label>
                 <input
                   type="text"
-                  required
                   value={titre}
                   onChange={(e) => setTitre(e.target.value)}
                   placeholder="Ex: Hook Dissonance Cognitive — Soin Visage"
@@ -411,7 +425,6 @@ export default function PromptsLibraryPage() {
                 </label>
                 <textarea
                   rows={6}
-                  required
                   value={contenuTexte}
                   onChange={(e) => setContenuTexte(e.target.value)}
                   placeholder="Saisissez le prompt exact ou la structure de script..."

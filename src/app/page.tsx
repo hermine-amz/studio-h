@@ -25,6 +25,7 @@ import {
   ChevronUp,
   Pencil,
   X,
+  History,
 } from 'lucide-react';
 import { useStudioData } from '@/context/StudioDataContext';
 import { useToast } from '@/context/ToastContext';
@@ -55,7 +56,9 @@ export default function CockpitPage() {
     finances,
     focusTaches,
     monthlyGoalEur,
+    goalHistory,
     setMonthlyGoalEur,
+    deleteGoalHistoryEntry,
     addFocusTache,
     updateFocusTache,
     toggleFocusTache,
@@ -81,7 +84,9 @@ export default function CockpitPage() {
   };
 
   const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [showGoalHistory, setShowGoalHistory] = useState(false);
   const [goalInput, setGoalInput] = useState(String(monthlyGoalEur));
+  const [goalError, setGoalError] = useState<string | null>(null);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskUrgence, setNewTaskUrgence] =
     useState<UrgenceNiveau>('Critique');
@@ -197,7 +202,18 @@ export default function CockpitPage() {
   const handleSaveGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = Number(goalInput);
-    if (!parsed || parsed <= 0) return;
+    if (!goalInput.trim() || Number.isNaN(parsed) || parsed < 100) {
+      const msg =
+        'Veuillez saisir un montant valide d’au moins 100 € pour votre objectif mensuel.';
+      setGoalError(msg);
+      toast({
+        title: 'Objectif invalide',
+        description: msg,
+        type: 'error',
+      });
+      return;
+    }
+    setGoalError(null);
 
     const ok = await confirm({
       title: 'Modifier l’objectif mensuel ?',
@@ -209,11 +225,11 @@ export default function CockpitPage() {
     });
     if (!ok) return;
 
-    setMonthlyGoalEur(parsed);
+    setMonthlyGoalEur(parsed, undefined, monthlyRevenueEur);
     setIsEditingGoal(false);
     toast({
       title: 'Objectif mensuel mis à jour',
-      description: `Nouvel objectif fixé à ${formatEur(parsed)} (${formatFcfa(parsed)}).`,
+      description: `Nouvel objectif fixé à ${formatEur(parsed)} (${formatFcfa(parsed)}). Enregistré dans l’historique.`,
     });
   };
 
@@ -221,6 +237,11 @@ export default function CockpitPage() {
     e.preventDefault();
     if (!newTaskText.trim()) {
       taskInputRef.current?.focus();
+      toast({
+        title: 'Tâche vide',
+        description: 'Veuillez saisir l’intitulé de votre tâche du jour.',
+        type: 'error',
+      });
       return;
     }
     const result = await addFocusTache(
@@ -309,6 +330,11 @@ export default function CockpitPage() {
     e.preventDefault();
     if (!ideaTitle.trim()) {
       ideaTitleRef.current?.focus();
+      toast({
+        title: 'Titre manquant',
+        description: 'Veuillez saisir un titre pour votre idée.',
+        type: 'error',
+      });
       return;
     }
 
@@ -346,7 +372,15 @@ export default function CockpitPage() {
 
   const handleSaveEditedIdea = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingIdea || !editIdeaTitle.trim()) return;
+    if (!editingIdea) return;
+    if (!editIdeaTitle.trim()) {
+      toast({
+        title: 'Titre obligatoire',
+        description: 'Le titre de l’idée ne peut pas être vide.',
+        type: 'error',
+      });
+      return;
+    }
 
     const ok = await confirm({
       title: `Modifier l'idée "${editingIdea.titre || editingIdea.contenu}" ?`,
@@ -503,30 +537,48 @@ export default function CockpitPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {isEditingGoal ? (
                   <form
                     onSubmit={handleSaveGoal}
-                    className="flex items-center gap-2"
+                    noValidate
+                    className="flex flex-wrap items-center gap-2"
                   >
                     <input
                       type="number"
                       min={100}
                       step={100}
                       value={goalInput}
-                      onChange={(e) => setGoalInput(e.target.value)}
-                      className="glass-input w-32"
+                      onChange={(e) => {
+                        setGoalInput(e.target.value);
+                        if (goalError) setGoalError(null);
+                      }}
+                      className={`glass-input w-32 ${
+                        goalError ? 'border-red-400' : ''
+                      }`}
                       placeholder="Ex: 3000"
                     />
                     <button type="submit" className="btn-primary">
                       <Check className="h-4 w-4" strokeWidth={1.5} />
                       <span>Valider</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingGoal(false);
+                        setGoalError(null);
+                      }}
+                      className="btn-secondary"
+                    >
+                      Annuler
+                    </button>
                   </form>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => {
                       setGoalInput(String(monthlyGoalEur));
+                      setGoalError(null);
                       setIsEditingGoal(true);
                     }}
                     className="btn-secondary"
@@ -535,8 +587,23 @@ export default function CockpitPage() {
                     <span>Modifier l’objectif</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowGoalHistory((prev) => !prev)}
+                  className="btn-secondary"
+                >
+                  <History className="h-4 w-4" strokeWidth={1.5} />
+                  <span>Historique ({goalHistory.length})</span>
+                </button>
               </div>
             </div>
+
+            {goalError && (
+              <p className="mt-2 text-xs text-red-600 font-medium">
+                {goalError}
+              </p>
+            )}
 
             <div className="mt-4 space-y-1.5">
               <div className="flex items-center justify-between text-xs text-zinc-500">
@@ -552,6 +619,78 @@ export default function CockpitPage() {
                 />
               </div>
             </div>
+
+            {showGoalHistory && (
+              <div className="mt-4 pt-4 border-t border-stone-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                    Historique des objectifs mensuels
+                  </h3>
+                  <span className="text-[11px] text-zinc-500">
+                    {goalHistory.length} modification
+                    {goalHistory.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                {goalHistory.length === 0 ? (
+                  <p className="text-xs text-zinc-500 py-2">
+                    Aucune modification enregistrée pour le moment. Chaque
+                    nouvel objectif validé apparaîtra ici avec sa date et votre
+                    progression.
+                  </p>
+                ) : (
+                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                    {goalHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 border border-stone-200/80 px-3 py-2 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <span className="font-mono font-semibold text-zinc-800 bg-[#FFF8B9]/80 border border-[#568203]/20 rounded-md px-2 py-0.5">
+                            {entry.mois}
+                          </span>
+                          <span className="font-semibold text-zinc-900">
+                            {formatEur(entry.objectif_eur)}
+                          </span>
+                          <span className="text-zinc-500">
+                            ({formatFcfa(entry.objectif_eur)})
+                          </span>
+                          {typeof entry.realise_eur === 'number' && (
+                            <span className="text-[#568203] font-medium">
+                              — Réalisé : {formatEur(entry.realise_eur)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-zinc-400">
+                            {new Date(entry.updated_at).toLocaleDateString(
+                              'fr-FR'
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: 'Supprimer cette entrée d’historique ?',
+                                description: `Retirer l’objectif de ${formatEur(
+                                  entry.objectif_eur
+                                )} (${entry.mois}) de l’historique ?`,
+                                confirmLabel: 'Supprimer',
+                                variant: 'danger',
+                              });
+                              if (ok) deleteGoalHistoryEntry(entry.id);
+                            }}
+                            className="p-1 text-zinc-400 hover:text-red-600 rounded"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -608,6 +747,7 @@ export default function CockpitPage() {
               <div className="mt-4">
                 <form
                   onSubmit={handleAddDailyTask}
+                  noValidate
                   className="flex flex-col sm:flex-row gap-2 mb-4"
                 >
                   <input
@@ -790,7 +930,7 @@ export default function CockpitPage() {
 
             {drawers.ideas && (
               <div className="mt-4">
-                <form onSubmit={handleAddIdea} className="space-y-2.5 mb-4">
+                <form onSubmit={handleAddIdea} noValidate className="space-y-2.5 mb-4">
                   <div className="flex gap-2">
                     <input
                       ref={ideaTitleRef}
@@ -1304,7 +1444,7 @@ export default function CockpitPage() {
           style={{ zIndex: 2147483600 }}
           className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
         >
-          <div className="glass-modal w-full max-w-lg p-5 sm:p-6 space-y-4">
+          <div className="glass-modal w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <h3 className="text-base font-semibold text-zinc-900">
                 Modifier l’idée
@@ -1317,14 +1457,13 @@ export default function CockpitPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditedIdea} className="space-y-3.5">
+            <form onSubmit={handleSaveEditedIdea} noValidate className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-zinc-700 mb-1">
                   Titre de l’idée *
                 </label>
                 <input
                   type="text"
-                  required
                   value={editIdeaTitle}
                   onChange={(e) => setEditIdeaTitle(e.target.value)}
                   className="glass-input"

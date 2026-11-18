@@ -64,13 +64,13 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               zIndex: 2147483640,
               backgroundColor: 'rgba(24, 24, 27, 0.55)',
             }}
-            className="fixed inset-0 flex items-center justify-center p-4"
+            className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto"
             onClick={() => handleClose(false)}
           >
             <div
               style={{ zIndex: 2147483647 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-md rounded-2xl bg-white border border-stone-200 p-5 sm:p-6 shadow-2xl space-y-4"
+              className="relative w-full max-w-md rounded-2xl bg-white border border-stone-200 p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">

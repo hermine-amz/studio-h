@@ -20,6 +20,8 @@ import type {
   FocusTache,
   UrgenceNiveau,
   DriveSubfolder,
+  GoalHistoryEntry,
+  SavingsConfig,
 } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from './ToastContext';
@@ -247,8 +249,13 @@ interface StudioDataContextValue {
   finances: Finance[];
   focusTaches: FocusTache[];
   monthlyGoalEur: number;
+  goalHistory: GoalHistoryEntry[];
+  savingsConfig: SavingsConfig;
   clientSubfolders: Record<string, DriveSubfolder[]>;
-  setMonthlyGoalEur: (val: number) => void;
+  setMonthlyGoalEur: (val: number, note?: string, realiseEur?: number) => void;
+  deleteGoalHistoryEntry: (id: string) => void;
+  updateSavingsConfig: (patch: Partial<SavingsConfig>) => void;
+  addSavingsDeposit: (amountEur: number) => void;
   refreshAllData: () => Promise<void>;
 
   // Prospects
@@ -350,7 +357,19 @@ const LIVE_STORAGE = {
   finances: 'studio_h_live_finances',
   focus: 'studio_h_live_focus',
   goal: 'studio_h_monthly_goal_v2',
+  goalHistory: 'studio_h_goal_history_v1',
+  savings: 'studio_h_savings_config_v1',
   subfolders: 'studio_h_subfolders_v2',
+};
+
+const DEFAULT_SAVINGS_CONFIG: SavingsConfig = {
+  enabled: true,
+  pourcentage_epargne: 20,
+  base_calcul: 'benefice_net',
+  objectif_epargne_eur: 10000,
+  solde_actuel_eur: 0,
+  nom_compte: 'Réserve Studio H',
+  updated_at: new Date().toISOString(),
 };
 
 export function StudioDataProvider({
@@ -370,6 +389,10 @@ export function StudioDataProvider({
   const [finances, setFinances] = useState<Finance[]>([]);
   const [focusTaches, setFocusTaches] = useState<FocusTache[]>([]);
   const [monthlyGoalEur, setMonthlyGoalState] = useState<number>(3000);
+  const [goalHistory, setGoalHistory] = useState<GoalHistoryEntry[]>([]);
+  const [savingsConfig, setSavingsConfig] = useState<SavingsConfig>(
+    DEFAULT_SAVINGS_CONFIG
+  );
   const [clientSubfolders, setClientSubfolders] = useState<
     Record<string, DriveSubfolder[]>
   >({});
@@ -475,6 +498,19 @@ export function StudioDataProvider({
       const savedGoal = localStorage.getItem(LIVE_STORAGE.goal);
       if (savedGoal) setMonthlyGoalState(Number(savedGoal) || 3000);
 
+      const savedGoalHistory = localStorage.getItem(LIVE_STORAGE.goalHistory);
+      if (savedGoalHistory) {
+        setGoalHistory(JSON.parse(savedGoalHistory) as GoalHistoryEntry[]);
+      }
+
+      const savedSavings = localStorage.getItem(LIVE_STORAGE.savings);
+      if (savedSavings) {
+        setSavingsConfig({
+          ...DEFAULT_SAVINGS_CONFIG,
+          ...(JSON.parse(savedSavings) as Partial<SavingsConfig>),
+        });
+      }
+
       const savedSubfolders = localStorage.getItem(LIVE_STORAGE.subfolders);
       if (savedSubfolders) {
         const parsedSubs = JSON.parse(savedSubfolders) as Record<
@@ -522,14 +558,84 @@ export function StudioDataProvider({
     clientSubfolders,
   ]);
 
-  const setMonthlyGoalEur = useCallback((val: number) => {
-    const clean = Math.max(100, Number(val) || 3000);
-    setMonthlyGoalState(clean);
-    try {
-      localStorage.setItem(LIVE_STORAGE.goal, String(clean));
-    } catch {
-      // ignore
-    }
+  const setMonthlyGoalEur = useCallback(
+    (val: number, note?: string, realiseEur?: number) => {
+      const clean = Math.max(100, Number(val) || 3000);
+      setMonthlyGoalState(clean);
+      const now = new Date();
+      const mois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+        2,
+        '0'
+      )}`;
+      const entry: GoalHistoryEntry = {
+        id: `goal_${Date.now()}`,
+        mois,
+        objectif_eur: clean,
+        realise_eur: typeof realiseEur === 'number' ? realiseEur : undefined,
+        note: note?.trim() || undefined,
+        updated_at: now.toISOString(),
+      };
+      setGoalHistory((prev) => {
+        const next = [entry, ...prev].slice(0, 50);
+        try {
+          localStorage.setItem(LIVE_STORAGE.goalHistory, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      try {
+        localStorage.setItem(LIVE_STORAGE.goal, String(clean));
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
+
+  const deleteGoalHistoryEntry = useCallback((id: string) => {
+    setGoalHistory((prev) => {
+      const next = prev.filter((g) => g.id !== id);
+      try {
+        localStorage.setItem(LIVE_STORAGE.goalHistory, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const updateSavingsConfig = useCallback((patch: Partial<SavingsConfig>) => {
+    setSavingsConfig((prev) => {
+      const next: SavingsConfig = {
+        ...prev,
+        ...patch,
+        updated_at: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(LIVE_STORAGE.savings, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const addSavingsDeposit = useCallback((amountEur: number) => {
+    if (!Number.isFinite(amountEur) || amountEur === 0) return;
+    setSavingsConfig((prev) => {
+      const next: SavingsConfig = {
+        ...prev,
+        solde_actuel_eur: Math.max(0, Number((prev.solde_actuel_eur + amountEur).toFixed(2))),
+        updated_at: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(LIVE_STORAGE.savings, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }, []);
 
   // --- PROSPECTS ---
@@ -1404,8 +1510,13 @@ export function StudioDataProvider({
         finances,
         focusTaches,
         monthlyGoalEur,
+        goalHistory,
+        savingsConfig,
         clientSubfolders,
         setMonthlyGoalEur,
+        deleteGoalHistoryEntry,
+        updateSavingsConfig,
+        addSavingsDeposit,
         refreshAllData,
         addProspect,
         updateProspectStatus,

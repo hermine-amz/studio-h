@@ -6,16 +6,44 @@ import { Lock, Mail, ArrowRight, ShieldCheck, KeyRound } from 'lucide-react';
 import { StudioHLogo } from '@/components/brand/StudioHLogo';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { useToast } from '@/context/ToastContext';
+import { isValidEmail } from '@/lib/validation';
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [email, setEmail] = useState('amouzounhermine7@gmail.com');
   const [password, setPassword] = useState('');
+  const [formErrors, setFormErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: { email?: string; password?: string } = {};
+    if (!email.trim()) {
+      errors.email = "L'adresse email est obligatoire.";
+    } else if (!isValidEmail(email)) {
+      errors.email = "Veuillez saisir une adresse email valide (ex: nom@domaine.com).";
+    }
+    if (!password) {
+      errors.password = 'Le mot de passe est obligatoire.';
+    } else if (password.length < 4) {
+      errors.password = 'Le mot de passe doit contenir au moins 4 caractères.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast({
+        title: 'Champs incomplets ou invalides',
+        description: Object.values(errors)[0],
+        type: 'error',
+      });
+      return;
+    }
+
+    setFormErrors({});
     setIsSubmitting(true);
 
     try {
@@ -56,7 +84,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-zinc-900 flex flex-col justify-center items-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#F8F9FA] text-zinc-900 flex flex-col justify-center items-center px-4 py-8 relative overflow-x-hidden overflow-y-auto">
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute top-1/4 left-1/3 h-72 w-72 rounded-full bg-[#FFF8B9]/60 blur-[100px]" />
         <div className="absolute bottom-1/4 right-1/3 h-64 w-64 rounded-full bg-[#568203]/[0.05] blur-[120px]" />
@@ -89,7 +117,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-3">
+          <form onSubmit={handleLogin} noValidate className="space-y-3">
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-600 mb-1">
                 Email de connexion
@@ -100,14 +128,24 @@ export default function LoginPage() {
                   strokeWidth={1.5}
                 />
                 <input
-                  type="email"
-                  required
+                  type="text"
+                  inputMode="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (formErrors.email) {
+                      setFormErrors((prev) => ({ ...prev, email: undefined }));
+                    }
+                  }}
                   placeholder="amouzounhermine7@gmail.com"
-                  className="glass-input pl-8"
+                  className={`glass-input pl-8 ${
+                    formErrors.email ? 'border-red-400 focus:border-red-500' : ''
+                  }`}
                 />
               </div>
+              {formErrors.email && (
+                <p className="mt-1 text-[11px] text-red-600">{formErrors.email}</p>
+              )}
             </div>
 
             <div>
@@ -121,13 +159,24 @@ export default function LoginPage() {
                 />
                 <input
                   type="password"
-                  required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (formErrors.password) {
+                      setFormErrors((prev) => ({ ...prev, password: undefined }));
+                    }
+                  }}
                   placeholder="Votre clé d'accès privée"
-                  className="glass-input pl-8"
+                  className={`glass-input pl-8 ${
+                    formErrors.password ? 'border-red-400 focus:border-red-500' : ''
+                  }`}
                 />
               </div>
+              {formErrors.password && (
+                <p className="mt-1 text-[11px] text-red-600">
+                  {formErrors.password}
+                </p>
+              )}
             </div>
 
             <button

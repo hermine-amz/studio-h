@@ -226,7 +226,15 @@ function ProductionWorkshopContent() {
 
   const handleAddScenePrompt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeOrder || !titreScene.trim()) return;
+    if (!activeOrder) return;
+    if (!titreScene.trim()) {
+      toast({
+        title: 'Titre de scène obligatoire',
+        description: 'Veuillez saisir un titre pour cette scène ou plan.',
+        type: 'error',
+      });
+      return;
+    }
     if (!promptPhoto.trim() && !promptVideo.trim()) {
       toast({
         title: 'Saisissez au moins un prompt (Photo ou Vidéo)',
@@ -386,7 +394,15 @@ function ProductionWorkshopContent() {
 
   const handleSaveEditedBrief = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeOrder || !editPackTitle.trim()) return;
+    if (!activeOrder) return;
+    if (!editPackTitle.trim()) {
+      toast({
+        title: 'Titre obligatoire',
+        description: 'Le titre du pack ou de la vidéo ne peut pas être vide.',
+        type: 'error',
+      });
+      return;
+    }
     const ok = await confirm({
       title: 'Modifier le titre et la description de la commande ?',
       description: `Confirmez-vous la mise à jour du pack "${editPackTitle}" ?`,
@@ -619,7 +635,22 @@ function ProductionWorkshopContent() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nomPack.trim() || !prospectId) return;
+    if (!prospectId) {
+      toast({
+        title: 'Client manquant',
+        description: 'Veuillez sélectionner un prospect ou un client rattaché.',
+        type: 'error',
+      });
+      return;
+    }
+    if (!nomPack.trim()) {
+      toast({
+        title: 'Titre du pack obligatoire',
+        description: 'Veuillez saisir le titre du pack ou de la vidéo UGC.',
+        type: 'error',
+      });
+      return;
+    }
 
     const finalLinks = newOrderLinkInput.trim()
       ? [...newOrderLinks, newOrderLinkInput.trim()]
@@ -1224,6 +1255,7 @@ function ProductionWorkshopContent() {
 
                     <form
                       onSubmit={handleAddOrderRefLink}
+                      noValidate
                       className="flex gap-2"
                     >
                       <input
@@ -1317,6 +1349,7 @@ function ProductionWorkshopContent() {
                   {/* Add Scene / Multi-Prompt Form */}
                   <form
                     onSubmit={handleAddScenePrompt}
+                    noValidate
                     className="rounded-xl bg-stone-50 border border-stone-200 p-4 space-y-3.5"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-stone-200/80">
@@ -1361,7 +1394,6 @@ function ProductionWorkshopContent() {
                         </label>
                         <input
                           type="text"
-                          required
                           value={titreScene}
                           onChange={(e) => setTitreScene(e.target.value)}
                           placeholder="Ex: Scène 1 (0-3s) — Hook Sérum Miroir"
@@ -1887,7 +1919,7 @@ function ProductionWorkshopContent() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateOrder} className="space-y-4">
+            <form onSubmit={handleCreateOrder} noValidate className="space-y-4">
               {/* Nature : Commande Client Réelle vs Essai Gratuit Prospect */}
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-zinc-700 mb-1.5">
@@ -1947,7 +1979,6 @@ function ProductionWorkshopContent() {
                   Prospect ou Client rattaché *
                 </label>
                 <select
-                  required
                   value={prospectId}
                   onChange={(e) => {
                     setProspectId(e.target.value);
@@ -1995,7 +2026,6 @@ function ProductionWorkshopContent() {
                 </label>
                 <input
                   type="text"
-                  required
                   value={nomPack}
                   onChange={(e) => setNomPack(e.target.value)}
                   placeholder="Ex: Pack 6 Créations UGC IA + 3 Hooks"
@@ -2184,7 +2214,7 @@ function ProductionWorkshopContent() {
           style={{ zIndex: 2147483600 }}
           className="fixed inset-0 flex items-center justify-center bg-zinc-900/50 p-4"
         >
-          <div className="glass-modal w-full max-w-lg p-5 sm:p-6 space-y-4">
+          <div className="glass-modal w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <h3 className="text-base font-semibold text-zinc-900">
                 Modifier le titre et la description UGC
@@ -2197,14 +2227,13 @@ function ProductionWorkshopContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditedBrief} className="space-y-3.5">
+            <form onSubmit={handleSaveEditedBrief} noValidate className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-zinc-700 mb-1">
                   Titre du Pack / Vidéo *
                 </label>
                 <input
                   type="text"
-                  required
                   value={editPackTitle}
                   onChange={(e) => setEditPackTitle(e.target.value)}
                   className="glass-input"

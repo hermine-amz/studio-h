@@ -42,6 +42,11 @@ import {
 } from '@/components/ui/CountryFlag';
 import { DataTablePagination } from '@/components/ui/DataTablePagination';
 import { fileToResizedDataUrl } from '@/lib/image-resize';
+import {
+  isValidEmail,
+  isValidOptionalUrl,
+  normalizeUrl,
+} from '@/lib/validation';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -269,10 +274,19 @@ export default function CrmPage() {
 
   const handleQuickAddAd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickProspect || !quickNewAdUrl.trim()) return;
+    if (!quickProspect) return;
+    if (!quickNewAdUrl.trim() || !isValidOptionalUrl(quickNewAdUrl)) {
+      toast({
+        title: 'Lien publicitaire invalide',
+        description:
+          'Veuillez saisir une URL valide (ex: https://www.facebook.com/ads/library/...).',
+        type: 'error',
+      });
+      return;
+    }
     const current = quickProspect.liens_pubs || [];
     await updateProspect(quickProspect.id, {
-      liens_pubs: [...current, quickNewAdUrl.trim()],
+      liens_pubs: [...current, normalizeUrl(quickNewAdUrl)],
     });
     setQuickNewAdUrl('');
     toast({ title: 'Lien Pub Facebook ajouté' });
@@ -280,10 +294,19 @@ export default function CrmPage() {
 
   const handleQuickAddProd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickProspect || !quickNewProdUrl.trim()) return;
+    if (!quickProspect) return;
+    if (!quickNewProdUrl.trim() || !isValidOptionalUrl(quickNewProdUrl)) {
+      toast({
+        title: 'Lien produit invalide',
+        description:
+          'Veuillez saisir une URL valide (ex: https://marque.eu/products/...).',
+        type: 'error',
+      });
+      return;
+    }
     const current = quickProspect.liens_produits || [];
     await updateProspect(quickProspect.id, {
-      liens_produits: [...current, quickNewProdUrl.trim()],
+      liens_produits: [...current, normalizeUrl(quickNewProdUrl)],
     });
     setQuickNewProdUrl('');
     toast({ title: 'Lien Produit ajouté' });
@@ -291,7 +314,31 @@ export default function CrmPage() {
 
   const handleCreateProspect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nomMarque.trim()) return;
+    if (!nomMarque.trim()) {
+      toast({
+        title: 'Nom de la marque obligatoire',
+        description: 'Veuillez saisir le nom de la marque pour créer la fiche.',
+        type: 'error',
+      });
+      return;
+    }
+    if (contactEmail.trim() && !isValidEmail(contactEmail)) {
+      toast({
+        title: 'Email invalide',
+        description:
+          "L'adresse email du contact n'est pas valide (ex: contact@marque.eu).",
+        type: 'error',
+      });
+      return;
+    }
+    if (!isValidOptionalUrl(lienBoutique)) {
+      toast({
+        title: 'Lien boutique invalide',
+        description: 'Veuillez vérifier l’URL de la boutique e-commerce.',
+        type: 'error',
+      });
+      return;
+    }
 
     const created = await addProspect({
       nom_marque: nomMarque.trim(),
@@ -1104,7 +1151,7 @@ export default function CrmPage() {
                   </span>
                 </div>
 
-                <form onSubmit={handleQuickAddAd} className="flex gap-1.5">
+                <form onSubmit={handleQuickAddAd} noValidate className="flex gap-1.5">
                   <input
                     type="url"
                     value={quickNewAdUrl}
@@ -1147,7 +1194,7 @@ export default function CrmPage() {
                   </span>
                 </div>
 
-                <form onSubmit={handleQuickAddProd} className="flex gap-1.5">
+                <form onSubmit={handleQuickAddProd} noValidate className="flex gap-1.5">
                   <input
                     type="url"
                     value={quickNewProdUrl}
@@ -1258,7 +1305,7 @@ export default function CrmPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateProspect} className="space-y-4">
+            <form onSubmit={handleCreateProspect} noValidate className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 pb-2">
                 <div className="flex items-center gap-3 shrink-0">
                   <input
@@ -1306,7 +1353,6 @@ export default function CrmPage() {
                     </label>
                     <input
                       type="text"
-                      required
                       value={nomMarque}
                       onChange={(e) => setNomMarque(e.target.value)}
                       placeholder="Ex: Maison Lumière Paris"

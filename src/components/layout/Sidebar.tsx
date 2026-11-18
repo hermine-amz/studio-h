@@ -16,6 +16,8 @@ import {
 import { StudioHLogo } from '@/components/brand/StudioHLogo';
 import { cn } from '@/lib/currency';
 import { useStudioData } from '@/context/StudioDataContext';
+import { useConfirm } from '@/context/ConfirmContext';
+import { useToast } from '@/context/ToastContext';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
@@ -55,6 +57,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { isLiveSupabase, commandes, prospects } = useStudioData();
+  const { confirm } = useConfirm();
+  const { toast } = useToast();
 
   const activeOrdersCount = commandes.filter(
     (c) => c.statut_production !== 'Livré'
@@ -64,6 +68,16 @@ export function Sidebar() {
   ).length;
 
   const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Se déconnecter de Studio H ?',
+      description:
+        'Vous devrez saisir à nouveau vos identifiants pour accéder à votre espace de travail.',
+      confirmLabel: 'Se déconnecter',
+      cancelLabel: 'Rester connecté',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
     document.cookie =
       'studio_h_session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     if (isSupabaseConfigured()) {
@@ -74,6 +88,11 @@ export function Sidebar() {
         // Ignore signOut error
       }
     }
+    toast({
+      title: 'Session fermée',
+      description: 'Vous avez été déconnecté en toute sécurité.',
+      type: 'info',
+    });
     router.push('/login');
     router.refresh();
   };

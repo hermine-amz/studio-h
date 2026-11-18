@@ -165,3 +165,22 @@ export interface DriveSubfolder {
   webViewLink: string;
   createdTime?: string;
 }
+
+export interface GoalHistoryEntry {
+  id: string;
+  mois: string; // YYYY-MM
+  objectif_eur: number;
+  realise_eur?: number;
+  note?: string;
+  updated_at: string;
+}
+
+export interface SavingsConfig {
+  enabled: boolean;
+  pourcentage_epargne: number;
+  base_calcul: 'benefice_net' | 'ca_encaisse';
+  objectif_epargne_eur: number;
+  solde_actuel_eur: number;
+  nom_compte: string;
+  updated_at: string;
+}
