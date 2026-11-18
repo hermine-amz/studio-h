@@ -41,31 +41,31 @@ to authenticated;
 create policy "studio_h_admin_only" on public.prospects
   for all to authenticated
   using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 create policy "studio_h_admin_only" on public.commandes_ugc
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 create policy "studio_h_admin_only" on public.medias_creations
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 create policy "studio_h_admin_only" on public.prompts_scripts
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 create policy "studio_h_admin_only" on public.finances
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 create policy "studio_h_admin_only" on public.focus_taches
   for all to authenticated
-  using ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__')
-  with check ((auth.jwt() ->> 'email') = '__STUDIO_H_ADMIN_EMAIL__');
+  using (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'))
+  with check (lower(coalesce(auth.jwt() ->> 'email', '')) = lower('__STUDIO_H_ADMIN_EMAIL__'));
 
 commit;
