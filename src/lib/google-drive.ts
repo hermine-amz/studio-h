@@ -175,3 +175,11 @@ export async function shareDriveFolderPublicRead(folderId: string): Promise<{
     simulated: false,
   };
 }
+
+export async function deleteDriveFile(fileId: string): Promise<void> {
+  if (!isRealDriveFolderId(fileId)) {
+    throw new Error('Identifiant de fichier Google Drive invalide.');
+  }
+  const drive = getDriveClient();
+  await drive.files.delete({ fileId, supportsAllDrives: true });
+}
