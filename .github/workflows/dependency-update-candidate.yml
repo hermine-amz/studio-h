@@ -34,6 +34,30 @@ jobs:
           npm install next@16.4.6 react@19 react-dom@19 googleapis@190.0.0
           npm install --save-dev @types/react@^19 @types/react-dom@^19 postcss@^8.5.23
 
+      - name: Adapt Supabase cookie access for Next.js 16
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          server = Path("src/lib/supabase/server.ts")
+          source = server.read_text()
+          source = source.replace(
+              "export function createServerSupabase() {",
+              "export async function createServerSupabase() {",
+          ).replace(
+              "const cookieStore = cookies();",
+              "const cookieStore = await cookies();",
+          )
+          server.write_text(source)
+
+          admin = Path("src/lib/supabase/admin.ts")
+          source = admin.read_text().replace(
+              "const supabase = createServerSupabase();",
+              "const supabase = await createServerSupabase();",
+          )
+          admin.write_text(source)
+          PY
+
       - name: Audit candidate dependencies
         run: |
           npm audit --json > /tmp/npm-audit.json || true
@@ -56,17 +80,17 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Commit validated dependency files
+      - name: Commit validated dependency and compatibility files
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
+          git add package.json package-lock.json src/lib/supabase/server.ts src/lib/supabase/admin.ts
           if ! git diff --cached --quiet; then
-            git commit -m "security: update vulnerable dependencies"
+            git commit -m "security: update dependencies and Next.js compatibility"
             git push origin HEAD:security/dependency-update-check
           else
-            echo "No dependency file changes to commit."
+            echo "No changes to commit."
           fi
 
       - name: Preserve candidate files for review
@@ -77,5 +101,7 @@ jobs:
           path: |
             package.json
             package-lock.json
+            src/lib/supabase/server.ts
+            src/lib/supabase/admin.ts
           if-no-files-found: warn
           retention-days: 7
