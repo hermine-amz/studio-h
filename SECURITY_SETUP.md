@@ -26,8 +26,18 @@ Cette migration n'est pas exécutée par le déploiement GitHub et ne modifie au
 
 Le middleware valide la session Supabase côté serveur avec `getUser()`, puis autorise uniquement l'email administrateur configuré. Les routes API sont aussi couvertes par le middleware. Les routes d'authentification Supabase restent gérées par Supabase Auth.
 
+## Routes Google Drive et livraison
+
+- L'upload exige une session admin Supabase vérifiée côté serveur.
+- Les fichiers acceptés sont JPG, PNG, WEBP, GIF, MP4, MOV et WEBM. Le type MIME, l'extension et la signature binaire sont contrôlés.
+- La limite applicative d'upload est de 100 Mo. **La plateforme d'hébergement peut imposer une limite de corps HTTP plus basse** (notamment les fonctions serverless) : vérifier cette limite en préproduction. Pour les vidéos UGC volumineuses, prévoir un upload direct/resumable vers Google Drive plutôt qu'un transit par la fonction Next.js.
+- Les métadonnées de marque, le nom du pack, le dossier Drive et l'adresse e-mail sont relus depuis Supabase ; le navigateur ne peut plus choisir librement le dossier de destination.
+- Une livraison est refusée si le paiement n'est pas marqué `Payé`, si la fiche client ou son e-mail manque, ou si toutes les créations prévues ne sont pas marquées `pret_pour_livraison = true`.
+- Le lien Drive reste accessible à toute personne qui le possède, conformément au mode de livraison actuel. Ne partager que des créations validées et destinées au client.
+
 ## Vérifications restantes
 
 - Lancer `npm ci`, `npm run build` et les tests de parcours dans un environnement de préproduction.
-- Tester upload et livraison Drive avec une commande de test non payante.
-- Confirmer les limites de taille et les types de fichiers acceptés côté serveur avant d'ouvrir les opérations de production.
+- Tester upload et livraison Drive avec une commande de test non payante, puis une commande payée de test avec tous les médias marqués prêts.
+- Vérifier la limite réelle du fournisseur d'hébergement ; les fichiers vidéo de plus de cette limite nécessiteront un flux direct/resumable.
+- Vérifier que les noms de champs et les statuts utilisés dans la base de production correspondent au schéma fourni.
