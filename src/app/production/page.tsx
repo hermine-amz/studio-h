@@ -116,6 +116,7 @@ function ProductionWorkshopContent() {
   const [previewRefPhoto, setPreviewRefPhoto] = useState<string | null>(null);
 
   // Multi-Prompts & Scene Breakdown State (Tab 2)
+  const [sceneFormError, setSceneFormError] = useState<string | null>(null);
   const [titreScene, setTitreScene] = useState('');
   const [modeDecoupage, setModeDecoupage] = useState<ModeDecoupagePrompt>(
     'Photo → Vidéo (Découpé / Séquence)'
@@ -127,6 +128,7 @@ function ProductionWorkshopContent() {
 
   // Edit Order Brief/Title Modal
   const [isEditBriefOpen, setIsEditBriefOpen] = useState(false);
+  const [editBriefError, setEditBriefError] = useState<string | null>(null);
   const [editPackTitle, setEditPackTitle] = useState('');
   const [editPackBrief, setEditPackBrief] = useState('');
 
@@ -136,6 +138,10 @@ function ProductionWorkshopContent() {
   const scenePhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   // New Order Modal Form
+  const [newOrderErrors, setNewOrderErrors] = useState<{
+    prospectId?: string;
+    nomPack?: string;
+  }>({});
   const [prospectId, setProspectId] = useState(prospects[0]?.id || '');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [typeCommande, setTypeCommande] =
@@ -228,20 +234,25 @@ function ProductionWorkshopContent() {
     e.preventDefault();
     if (!activeOrder) return;
     if (!titreScene.trim()) {
+      const msg = 'Le titre de la scène ou du plan est obligatoire.';
+      setSceneFormError(msg);
       toast({
         title: 'Titre de scène obligatoire',
-        description: 'Veuillez saisir un titre pour cette scène ou plan.',
+        description: msg,
         type: 'error',
       });
       return;
     }
     if (!promptPhoto.trim() && !promptVideo.trim()) {
+      const msg = 'Saisissez au moins un prompt (Photo ou Vidéo).';
+      setSceneFormError(msg);
       toast({
-        title: 'Saisissez au moins un prompt (Photo ou Vidéo)',
+        title: msg,
         type: 'error',
       });
       return;
     }
+    setSceneFormError(null);
 
     const newScene: CommandePromptScene = {
       id: crypto.randomUUID(),
@@ -396,13 +407,16 @@ function ProductionWorkshopContent() {
     e.preventDefault();
     if (!activeOrder) return;
     if (!editPackTitle.trim()) {
+      const msg = 'Le titre du pack ou de la vidéo est obligatoire.';
+      setEditBriefError(msg);
       toast({
         title: 'Titre obligatoire',
-        description: 'Le titre du pack ou de la vidéo ne peut pas être vide.',
+        description: msg,
         type: 'error',
       });
       return;
     }
+    setEditBriefError(null);
     const ok = await confirm({
       title: 'Modifier le titre et la description de la commande ?',
       description: `Confirmez-vous la mise à jour du pack "${editPackTitle}" ?`,
@@ -635,22 +649,23 @@ function ProductionWorkshopContent() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: { prospectId?: string; nomPack?: string } = {};
     if (!prospectId) {
-      toast({
-        title: 'Client manquant',
-        description: 'Veuillez sélectionner un prospect ou un client rattaché.',
-        type: 'error',
-      });
-      return;
+      errors.prospectId = 'Veuillez sélectionner un prospect ou un client.';
     }
     if (!nomPack.trim()) {
+      errors.nomPack = 'Le titre du pack / vidéo UGC est obligatoire.';
+    }
+    if (Object.keys(errors).length > 0) {
+      setNewOrderErrors(errors);
       toast({
-        title: 'Titre du pack obligatoire',
-        description: 'Veuillez saisir le titre du pack ou de la vidéo UGC.',
+        title: 'Champs obligatoires manquants',
+        description: Object.values(errors)[0],
         type: 'error',
       });
       return;
     }
+    setNewOrderErrors({});
 
     const finalLinks = newOrderLinkInput.trim()
       ? [...newOrderLinks, newOrderLinkInput.trim()]
@@ -1395,10 +1410,20 @@ function ProductionWorkshopContent() {
                         <input
                           type="text"
                           value={titreScene}
-                          onChange={(e) => setTitreScene(e.target.value)}
+                          onChange={(e) => {
+                            setTitreScene(e.target.value);
+                            if (sceneFormError) setSceneFormError(null);
+                          }}
                           placeholder="Ex: Scène 1 (0-3s) — Hook Sérum Miroir"
-                          className="glass-input"
+                          className={`glass-input ${
+                            sceneFormError ? 'border-red-400 bg-red-50/40' : ''
+                          }`}
                         />
+                        {sceneFormError && (
+                          <p className="mt-1 text-[11px] font-medium text-red-600">
+                            {sceneFormError}
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -1983,8 +2008,18 @@ function ProductionWorkshopContent() {
                   onChange={(e) => {
                     setProspectId(e.target.value);
                     setSelectedProductId('');
+                    if (newOrderErrors.prospectId) {
+                      setNewOrderErrors((prev) => ({
+                        ...prev,
+                        prospectId: undefined,
+                      }));
+                    }
                   }}
-                  className="glass-input"
+                  className={`glass-input ${
+                    newOrderErrors.prospectId
+                      ? 'border-red-400 bg-red-50/40'
+                      : ''
+                  }`}
                 >
                   <option value="">Sélectionner un client...</option>
                   {prospects.map((p) => (
@@ -1993,6 +2028,11 @@ function ProductionWorkshopContent() {
                     </option>
                   ))}
                 </select>
+                {newOrderErrors.prospectId && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {newOrderErrors.prospectId}
+                  </p>
+                )}
               </div>
 
               {(() => {
@@ -2027,10 +2067,27 @@ function ProductionWorkshopContent() {
                 <input
                   type="text"
                   value={nomPack}
-                  onChange={(e) => setNomPack(e.target.value)}
+                  onChange={(e) => {
+                    setNomPack(e.target.value);
+                    if (newOrderErrors.nomPack) {
+                      setNewOrderErrors((prev) => ({
+                        ...prev,
+                        nomPack: undefined,
+                      }));
+                    }
+                  }}
                   placeholder="Ex: Pack 6 Créations UGC IA + 3 Hooks"
-                  className="glass-input"
+                  className={`glass-input ${
+                    newOrderErrors.nomPack
+                      ? 'border-red-400 bg-red-50/40'
+                      : ''
+                  }`}
                 />
+                {newOrderErrors.nomPack && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {newOrderErrors.nomPack}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -2235,9 +2292,19 @@ function ProductionWorkshopContent() {
                 <input
                   type="text"
                   value={editPackTitle}
-                  onChange={(e) => setEditPackTitle(e.target.value)}
-                  className="glass-input"
+                  onChange={(e) => {
+                    setEditPackTitle(e.target.value);
+                    if (editBriefError) setEditBriefError(null);
+                  }}
+                  className={`glass-input ${
+                    editBriefError ? 'border-red-400 bg-red-50/40' : ''
+                  }`}
                 />
+                {editBriefError && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {editBriefError}
+                  </p>
+                )}
               </div>
 
               <div>

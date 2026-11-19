@@ -1,6 +1,13 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -24,6 +31,11 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -51,52 +63,72 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div
-        style={{ zIndex: 2147483630 }}
-        className="fixed bottom-4 right-4 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"
-      >
-        {toasts.map((item) => (
+      {mounted &&
+        createPortal(
           <div
-            key={item.id}
-            className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-white border border-stone-200 p-3 text-zinc-900 shadow-xl transition-all duration-200"
+            style={{ zIndex: 2147483645 }}
+            className="fixed top-16 sm:top-5 right-3 left-3 sm:left-auto sm:right-5 sm:w-96 flex flex-col gap-2.5 pointer-events-none"
           >
-            <div className="mt-0.5 shrink-0">
-              {item.type === 'success' && (
-                <CheckCircle2
-                  className="h-4 w-4 text-[#568203]"
-                  strokeWidth={1.5}
-                />
-              )}
-              {item.type === 'error' && (
-                <AlertTriangle
-                  className="h-4 w-4 text-amber-600"
-                  strokeWidth={1.5}
-                />
-              )}
-              {item.type === 'info' && (
-                <Info className="h-4 w-4 text-zinc-700" strokeWidth={1.5} />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-zinc-900 leading-snug">
-                {item.title}
-              </p>
-              {item.description && (
-                <p className="mt-0.5 text-[11px] text-zinc-500 leading-relaxed">
-                  {item.description}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => removeToast(item.id)}
-              className="shrink-0 rounded-md p-1 text-zinc-400 hover:text-zinc-700 hover:bg-stone-100 transition-colors"
-              aria-label="Fermer la notification"
-            >
-              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-            </button>
-          </div>
-        ))}
-      </div>
+            {toasts.map((item) => (
+              <div
+                key={item.id}
+                className={`pointer-events-auto flex items-start gap-3 rounded-2xl border p-3.5 shadow-2xl backdrop-blur-md transition-all duration-200 ${
+                  item.type === 'error'
+                    ? 'bg-red-50/95 border-red-300 text-red-950'
+                    : item.type === 'success'
+                    ? 'bg-white/95 border-[#568203]/45 text-zinc-900'
+                    : 'bg-white/95 border-stone-300 text-zinc-900'
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border ${
+                    item.type === 'error'
+                      ? 'bg-red-100 border-red-200 text-red-600'
+                      : item.type === 'success'
+                      ? 'bg-[#FFF8B9] border-[#568203]/30 text-[#568203]'
+                      : 'bg-stone-100 border-stone-200 text-zinc-700'
+                  }`}
+                >
+                  {item.type === 'success' && (
+                    <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+                  )}
+                  {item.type === 'error' && (
+                    <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
+                  )}
+                  {item.type === 'info' && (
+                    <Info className="h-4 w-4" strokeWidth={1.75} />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-xs font-semibold leading-snug ${
+                      item.type === 'error' ? 'text-red-900' : 'text-zinc-900'
+                    }`}
+                  >
+                    {item.title}
+                  </p>
+                  {item.description && (
+                    <p
+                      className={`mt-0.5 text-[11px] leading-relaxed ${
+                        item.type === 'error' ? 'text-red-700' : 'text-zinc-600'
+                      }`}
+                    >
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => removeToast(item.id)}
+                  className="shrink-0 rounded-md p-1 text-zinc-400 hover:text-zinc-700 hover:bg-stone-100 transition-colors"
+                  aria-label="Fermer la notification"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </button>
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
     </ToastContext.Provider>
   );
 }

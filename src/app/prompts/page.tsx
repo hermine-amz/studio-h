@@ -44,6 +44,10 @@ export default function PromptsLibraryPage() {
   const [categorie, setCategorie] = useState<CategoriePrompt>('Hook vidéo');
   const [niche, setNiche] = useState('Cosmétique & Skincare');
   const [contenuTexte, setContenuTexte] = useState('');
+  const [promptFormErrors, setPromptFormErrors] = useState<{
+    titre?: string;
+    contenuTexte?: string;
+  }>({});
 
   const allNiches = useMemo(() => {
     const set = new Set<string>();
@@ -120,22 +124,23 @@ export default function PromptsLibraryPage() {
 
   const handleSavePrompt = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: { titre?: string; contenuTexte?: string } = {};
     if (!titre.trim()) {
-      toast({
-        title: 'Titre obligatoire',
-        description: 'Veuillez saisir un titre pour ce prompt ou script.',
-        type: 'error',
-      });
-      return;
+      errors.titre = 'Le titre du prompt ou script est obligatoire.';
     }
     if (!contenuTexte.trim()) {
+      errors.contenuTexte = 'Le contenu du prompt ou script est obligatoire.';
+    }
+    if (Object.keys(errors).length > 0) {
+      setPromptFormErrors(errors);
       toast({
-        title: 'Contenu obligatoire',
-        description: 'Veuillez saisir le texte du prompt ou du script.',
+        title: 'Champs obligatoires manquants',
+        description: Object.values(errors)[0],
         type: 'error',
       });
       return;
     }
+    setPromptFormErrors({});
 
     if (editingPrompt) {
       const ok = await confirm({
@@ -379,10 +384,25 @@ export default function PromptsLibraryPage() {
                 <input
                   type="text"
                   value={titre}
-                  onChange={(e) => setTitre(e.target.value)}
+                  onChange={(e) => {
+                    setTitre(e.target.value);
+                    if (promptFormErrors.titre) {
+                      setPromptFormErrors((prev) => ({
+                        ...prev,
+                        titre: undefined,
+                      }));
+                    }
+                  }}
                   placeholder="Ex: Hook Dissonance Cognitive — Soin Visage"
-                  className="glass-input"
+                  className={`glass-input ${
+                    promptFormErrors.titre ? 'border-red-400 bg-red-50/40' : ''
+                  }`}
                 />
+                {promptFormErrors.titre && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {promptFormErrors.titre}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -426,10 +446,27 @@ export default function PromptsLibraryPage() {
                 <textarea
                   rows={6}
                   value={contenuTexte}
-                  onChange={(e) => setContenuTexte(e.target.value)}
+                  onChange={(e) => {
+                    setContenuTexte(e.target.value);
+                    if (promptFormErrors.contenuTexte) {
+                      setPromptFormErrors((prev) => ({
+                        ...prev,
+                        contenuTexte: undefined,
+                      }));
+                    }
+                  }}
                   placeholder="Saisissez le prompt exact ou la structure de script..."
-                  className="glass-input font-mono text-xs leading-relaxed"
+                  className={`glass-input font-mono text-xs leading-relaxed ${
+                    promptFormErrors.contenuTexte
+                      ? 'border-red-400 bg-red-50/40'
+                      : ''
+                  }`}
                 />
+                {promptFormErrors.contenuTexte && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {promptFormErrors.contenuTexte}
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end gap-2.5 pt-3.5 border-t border-stone-200/85">

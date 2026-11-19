@@ -121,6 +121,11 @@ export default function CrmPage() {
   const [instagramUrl, setInstagramUrl] = useState('');
   const [tiktokUrl, setTiktokUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
+  const [prospectFormErrors, setProspectFormErrors] = useState<{
+    nomMarque?: string;
+    contactEmail?: string;
+    lienBoutique?: string;
+  }>({});
 
   const logoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -314,31 +319,34 @@ export default function CrmPage() {
 
   const handleCreateProspect = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: {
+      nomMarque?: string;
+      contactEmail?: string;
+      lienBoutique?: string;
+    } = {};
+
     if (!nomMarque.trim()) {
-      toast({
-        title: 'Nom de la marque obligatoire',
-        description: 'Veuillez saisir le nom de la marque pour créer la fiche.',
-        type: 'error',
-      });
-      return;
+      errors.nomMarque = 'Le nom de la marque est obligatoire.';
     }
     if (contactEmail.trim() && !isValidEmail(contactEmail)) {
-      toast({
-        title: 'Email invalide',
-        description:
-          "L'adresse email du contact n'est pas valide (ex: contact@marque.eu).",
-        type: 'error',
-      });
-      return;
+      errors.contactEmail =
+        "L'adresse email du contact est invalide (ex: contact@marque.eu).";
     }
     if (!isValidOptionalUrl(lienBoutique)) {
+      errors.lienBoutique =
+        "L'URL de la boutique est invalide (ex: https://marque.eu).";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setProspectFormErrors(errors);
       toast({
-        title: 'Lien boutique invalide',
-        description: 'Veuillez vérifier l’URL de la boutique e-commerce.',
+        title: 'Vérifiez le formulaire',
+        description: Object.values(errors)[0],
         type: 'error',
       });
       return;
     }
+    setProspectFormErrors({});
 
     const created = await addProspect({
       nom_marque: nomMarque.trim(),
@@ -1354,10 +1362,27 @@ export default function CrmPage() {
                     <input
                       type="text"
                       value={nomMarque}
-                      onChange={(e) => setNomMarque(e.target.value)}
+                      onChange={(e) => {
+                        setNomMarque(e.target.value);
+                        if (prospectFormErrors.nomMarque) {
+                          setProspectFormErrors((prev) => ({
+                            ...prev,
+                            nomMarque: undefined,
+                          }));
+                        }
+                      }}
                       placeholder="Ex: Maison Lumière Paris"
-                      className="glass-input"
+                      className={`glass-input ${
+                        prospectFormErrors.nomMarque
+                          ? 'border-red-400 bg-red-50/40'
+                          : ''
+                      }`}
                     />
+                    {prospectFormErrors.nomMarque && (
+                      <p className="mt-1 text-[11px] font-medium text-red-600">
+                        {prospectFormErrors.nomMarque}
+                      </p>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2">
@@ -1388,12 +1413,30 @@ export default function CrmPage() {
                     Email
                   </label>
                   <input
-                    type="email"
+                    type="text"
+                    inputMode="email"
                     value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
+                    onChange={(e) => {
+                      setContactEmail(e.target.value);
+                      if (prospectFormErrors.contactEmail) {
+                        setProspectFormErrors((prev) => ({
+                          ...prev,
+                          contactEmail: undefined,
+                        }));
+                      }
+                    }}
                     placeholder="contact@marque.eu"
-                    className="glass-input"
+                    className={`glass-input ${
+                      prospectFormErrors.contactEmail
+                        ? 'border-red-400 bg-red-50/40'
+                        : ''
+                    }`}
                   />
+                  {prospectFormErrors.contactEmail && (
+                    <p className="mt-1 text-[11px] font-medium text-red-600">
+                      {prospectFormErrors.contactEmail}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1453,12 +1496,30 @@ export default function CrmPage() {
                   Lien boutique e-commerce
                 </label>
                 <input
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   value={lienBoutique}
-                  onChange={(e) => setLienBoutique(e.target.value)}
+                  onChange={(e) => {
+                    setLienBoutique(e.target.value);
+                    if (prospectFormErrors.lienBoutique) {
+                      setProspectFormErrors((prev) => ({
+                        ...prev,
+                        lienBoutique: undefined,
+                      }));
+                    }
+                  }}
                   placeholder="https://marque.eu"
-                  className="glass-input"
+                  className={`glass-input ${
+                    prospectFormErrors.lienBoutique
+                      ? 'border-red-400 bg-red-50/40'
+                      : ''
+                  }`}
                 />
+                {prospectFormErrors.lienBoutique && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {prospectFormErrors.lienBoutique}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5">

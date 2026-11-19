@@ -222,6 +222,7 @@ function Client360Content() {
 
   // New Product Form State
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [prodFormError, setProdFormError] = useState<string | null>(null);
   const [newProdName, setNewProdName] = useState('');
   const [newProdLink, setNewProdLink] = useState('');
   const [newProdAdInput, setNewProdAdInput] = useState('');
@@ -232,6 +233,7 @@ function Client360Content() {
 
   // New Order Modal State
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [orderFormError, setOrderFormError] = useState<string | null>(null);
   const [selectedOrderProductId, setSelectedOrderProductId] = useState<string>('');
   const [typeCommande, setTypeCommande] =
     useState<TypeCommandeUgc>('commande_client');
@@ -421,13 +423,16 @@ function Client360Content() {
     e.preventDefault();
     if (!client) return;
     if (!newProdName.trim()) {
+      const msg = 'Le nom du produit est obligatoire.';
+      setProdFormError(msg);
       toast({
         title: 'Nom du produit obligatoire',
-        description: 'Veuillez saisir le nom du produit avant de l’ajouter.',
+        description: msg,
         type: 'error',
       });
       return;
     }
+    setProdFormError(null);
 
     const finalAds = newProdAdInput.trim()
       ? [...newProdAds, newProdAdInput.trim()]
@@ -474,7 +479,18 @@ function Client360Content() {
 
   const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client || !nomPack.trim()) return;
+    if (!client) return;
+    if (!nomPack.trim()) {
+      const msg = 'Le titre / nom du pack UGC est obligatoire.';
+      setOrderFormError(msg);
+      toast({
+        title: 'Titre du pack obligatoire',
+        description: msg,
+        type: 'error',
+      });
+      return;
+    }
+    setOrderFormError(null);
 
     const linkedProduct = (client.produits || []).find(
       (p) => p.id === selectedOrderProductId
@@ -1374,10 +1390,20 @@ function Client360Content() {
                 <input
                   type="text"
                   value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
+                  onChange={(e) => {
+                    setNewProdName(e.target.value);
+                    if (prodFormError) setProdFormError(null);
+                  }}
                   placeholder="Ex: Sérum Éclat Botanique 30ml"
-                  className="glass-input"
+                  className={`glass-input ${
+                    prodFormError ? 'border-red-400 bg-red-50/40' : ''
+                  }`}
                 />
+                {prodFormError && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {prodFormError}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -2248,10 +2274,20 @@ function Client360Content() {
                 <input
                   type="text"
                   value={nomPack}
-                  onChange={(e) => setNomPack(e.target.value)}
+                  onChange={(e) => {
+                    setNomPack(e.target.value);
+                    if (orderFormError) setOrderFormError(null);
+                  }}
                   placeholder="Ex: Pack Scale Meta — 6 Vidéos UGC IA"
-                  className="glass-input"
+                  className={`glass-input ${
+                    orderFormError ? 'border-red-400 bg-red-50/40' : ''
+                  }`}
                 />
+                {orderFormError && (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">
+                    {orderFormError}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
