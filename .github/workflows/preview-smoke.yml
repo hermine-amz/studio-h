@@ -1,0 +1,66 @@
+name: Preview functional smoke tests
+
+on:
+  push:
+    branches:
+      - security/dependency-update-check
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Check preview access controls
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check preview routes without credentials
+        env:
+          PREVIEW_URL: https://studio-h-git-security-dependency-aad7df-hermine-dev-s-projects.vercel.app
+        run: |
+          set -euo pipefail
+
+          check_status() {
+            local path="$1"
+            local expected="$2"
+            local actual
+            actual="$(curl --silent --show-error --max-time 30 --output /tmp/response.txt --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
+            echo "${path}: HTTP ${actual} (expected ${expected})"
+            if [ "${actual}" != "${expected}" ]; then
+              echo "Unexpected response for ${path}"
+              sed -n '1,20p' /tmp/headers.txt
+              head -c 500 /tmp/response.txt || true
+              exit 1
+            fi
+          }
+
+          check_redirect_to_login() {
+            local path="$1"
+            local actual
+            actual="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
+            local location
+            location="$(grep -i '^location:' /tmp/headers.txt | tail -n 1 | tr -d '\r' || true)"
+            echo "${path}: HTTP ${actual}; ${location}"
+            if [ "${actual}" != "307" ] && [ "${actual}" != "308" ] && [ "${actual}" != "302" ]; then
+              echo "Expected an unauthenticated redirect for ${path}"
+              cat /tmp/headers.txt
+              exit 1
+            fi
+            if ! echo "${location}" | grep -qi '/login'; then
+              echo "Expected redirect to /login for ${path}"
+              cat /tmp/headers.txt
+              exit 1
+            fi
+          }
+
+          check_status "/login" "200"
+          check_redirect_to_login "/"
+          check_redirect_to_login "/crm"
+          check_redirect_to_login "/production"
+          check_redirect_to_login "/prompts"
+          check_redirect_to_login "/finances"
+
+          check_status "/api/drive/create-folder" "401"
+          check_status "/api/drive/upload" "401"
+          check_status "/api/orders/deliver" "401"
+
+          echo "Preview smoke tests passed. No credentials, database writes, uploads or Drive operations were used."
