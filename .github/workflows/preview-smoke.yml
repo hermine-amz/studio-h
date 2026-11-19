@@ -16,14 +16,20 @@ jobs:
       - name: Check preview routes without credentials
         env:
           PREVIEW_URL: https://studio-h-git-security-dependency-aad7df-hermine-dev-s-projects.vercel.app
+          VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
+
+          if [ -z "${VERCEL_BYPASS_SECRET}" ]; then
+            echo "::warning::Functional smoke tests skipped: add the Vercel Protection Bypass for Automation token as the GitHub Actions secret VERCEL_AUTOMATION_BYPASS_SECRET, then rerun this workflow."
+            exit 0
+          fi
 
           check_status() {
             local path="$1"
             local expected="$2"
             local actual
-            actual="$(curl --silent --show-error --max-time 30 --output /tmp/response.txt --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
+            actual="$(curl --silent --show-error --max-time 30 --header "x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}" --output /tmp/response.txt --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
             echo "${path}: HTTP ${actual} (expected ${expected})"
             if [ "${actual}" != "${expected}" ]; then
               echo "Unexpected response for ${path}"
@@ -36,7 +42,7 @@ jobs:
           check_redirect_to_login() {
             local path="$1"
             local actual
-            actual="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
+            actual="$(curl --silent --show-error --max-time 30 --header "x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}" --output /dev/null --dump-header /tmp/headers.txt --write-out '%{http_code}' "${PREVIEW_URL}${path}")"
             local location
             location="$(grep -i '^location:' /tmp/headers.txt | tail -n 1 | tr -d '\r' || true)"
             echo "${path}: HTTP ${actual}; ${location}"
