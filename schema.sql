@@ -82,14 +82,23 @@ CREATE TABLE IF NOT EXISTS focus_taches (
 
 ALTER TABLE focus_taches ADD COLUMN IF NOT EXISTS urgence TEXT DEFAULT 'Normale';
 
--- 7. Permissions & Accès API Supabase (Désactive le blocage RLS pour votre usage privé)
-ALTER TABLE prospects DISABLE ROW LEVEL SECURITY;
-ALTER TABLE commandes_ugc DISABLE ROW LEVEL SECURITY;
-ALTER TABLE medias_creations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE prompts_scripts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE finances DISABLE ROW LEVEL SECURITY;
-ALTER TABLE focus_taches DISABLE ROW LEVEL SECURITY;
+-- 7. Sécurité Supabase : fail closed dès la création des tables.
+-- Les droits CRUD et la politique administrateur sont ajoutés par
+-- supabase/migrations/20261118000000_studio_h_admin_rls.sql après configuration.
+ALTER TABLE prospects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE commandes_ugc ENABLE ROW LEVEL SECURITY;
+ALTER TABLE medias_creations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prompts_scripts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE finances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE focus_taches ENABLE ROW LEVEL SECURITY;
 
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+REVOKE ALL ON TABLE
+  prospects,
+  commandes_ugc,
+  medias_creations,
+  prompts_scripts,
+  finances,
+  focus_taches
+FROM anon, authenticated, public;
+
+GRANT USAGE ON SCHEMA public TO authenticated, service_role;

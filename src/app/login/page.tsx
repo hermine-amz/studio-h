@@ -47,19 +47,21 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      if (isSupabaseConfigured()) {
-        const supabase = createClient();
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (error) {
-          throw new Error(error.message);
-        }
+      if (!isSupabaseConfigured()) {
+        throw new Error('La configuration Supabase est indisponible. Contactez l’administrateur.');
       }
 
-      document.cookie =
-        'studio_h_session=authenticated; path=/; max-age=2592000; SameSite=Lax';
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Supabase SSR manages the secure auth cookies. Never create a local
+      // "authenticated" cookie: it is not proof of an authenticated session.
 
       toast({
         title: 'Session Studio H déverrouillée',

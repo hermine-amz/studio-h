@@ -1,9 +1,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { getSupabaseCredentials } from './client';
+import { getSupabaseCredentials, isSupabaseConfigured } from './client';
 
 export function isServerSupabaseConfigured(): boolean {
-  return true;
+  return isSupabaseConfigured();
 }
 
 export function createServerSupabase() {
